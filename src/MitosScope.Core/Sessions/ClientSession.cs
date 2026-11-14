@@ -30,18 +30,22 @@ public enum SessionChange
     /// <summary>MatchTracker: a match just ended (new last match).</summary>
     LastMatch = 1 << 8,
     BattlePass = 1 << 9,
-    All = Status | Game | Account | Inventory | Profile | Quests | LastMatch | BattlePass,
+    Wallet = 1 << 10,
+    Equipment = 1 << 11,
+    All = Status | Game | Account | Inventory | Profile | Quests | LastMatch | BattlePass | Wallet | Equipment,
 }
 
 /// <summary>
-/// One logged-in game client (one slot/port): authenticates, then polls /v1/game every second
-/// and the account sections every 60 s, re-authenticating on 401. <see cref="RunAsync"/> ends when
-/// the client goes away.
+/// One logged-in game client (one slot/port): authenticates, then polls /v1/game every second,
+/// the uncached wallet and equipment every 15 s and the cached account sections every 60 s,
+/// re-authenticating on 401. <see cref="RunAsync"/> ends when the client goes away.
 /// </summary>
 public sealed class ClientSession
 {
     public static readonly TimeSpan GameInterval = TimeSpan.FromSeconds(1);
     public static readonly TimeSpan SectionInterval = TimeSpan.FromSeconds(60);
+    /// <summary>/v1/wallet and /v1/equipment aren't cached by the server (API v3), so they can be fresher.</summary>
+    public static readonly TimeSpan LiveSectionInterval = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan AuthPollInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan WatchInterval = TimeSpan.FromSeconds(5);
     private const int MaxUnreachable = 3;
@@ -73,6 +77,15 @@ public sealed class ClientSession
     public ProfileStats? Profile { get; private set; }
     public IReadOnlyList<Quest>? Quests { get; private set; }
     public BattlePassInfo? BattlePass { get; private set; }
+    /// <summary>Null until the first /v1/wallet answer, or if the client doesn't have it (API before v3).</summary>
+    public Wallet? Wallet { get; private set; }
+    /// <summary>Null until the first /v1/equipment answer, or if the client doesn't have it (then use <see cref="Inventory"/>).</summary>
+    public IReadOnlyList<EquipmentSlot>? Equipment { get; private set; }
+
+    // Set when the client answers 404 (API before v3). A client's API version doesn't change while
+    // it runs, so these are never reset.
+    private bool _noWallet;
+    private bool _noEquipment;
 
     /// <summary>Live peak mass and last-match stats, fed by the game poll.</summary>
     public MatchTracker Matches { get; } = new();
@@ -179,7 +192,8 @@ public sealed class ClientSession
 
         var loops = Task.WhenAll(
             GameLoopAsync(token, stop, pollCts.Token),
-            SectionsLoopAsync(token, stop, pollCts.Token));
+            SectionsLoopAsync(token, stop, pollCts.Token),
+            LiveSectionsLoopAsync(token, stop, pollCts.Token));
 
         try
         {
@@ -211,30 +225,62 @@ public sealed class ClientSession
 
     private async Task SectionsLoopAsync(string token, TaskCompletionSource<PollOutcome> stop, CancellationToken ct)
     {
-        var unreachable = 0;
+        _sectionsUnreachable = 0;
         while (!stop.Task.IsCompleted)
         {
             // Sequential on purpose: each one can take up to 20 s on the server side.
-            await FetchAsync<AccountInfo>("account", v => Account = v, SessionChange.Account);
-            await FetchAsync<List<Quest>>("quests", v => Quests = v, SessionChange.Quests);
-            await FetchAsync<ProfileStats>("profile", v => Profile = v, SessionChange.Profile);
-            await FetchAsync<List<InventoryItem>>("inventory", v => Inventory = v, SessionChange.Inventory);
-            await FetchAsync<BattlePassInfo>("battlepass", v => BattlePass = v, SessionChange.BattlePass);
+            await FetchSectionAsync<AccountInfo>("account", v => Account = v, SessionChange.Account, stop, token, ct);
+            await FetchSectionAsync<List<Quest>>("quests", v => Quests = v, SessionChange.Quests, stop, token, ct);
+            await FetchSectionAsync<ProfileStats>("profile", v => Profile = v, SessionChange.Profile, stop, token, ct);
+            // The equipped items come from /v1/equipment; the inventory is only the fallback for older clients.
+            if (_noEquipment)
+                await FetchSectionAsync<List<InventoryItem>>("inventory", v => Inventory = v, SessionChange.Inventory, stop, token, ct);
+            await FetchSectionAsync<BattlePassInfo>("battlepass", v => BattlePass = v, SessionChange.BattlePass, stop, token, ct);
 
             await Task.Delay(SectionInterval, ct).ConfigureAwait(false);
         }
+    }
 
-        async Task FetchAsync<T>(string section, Action<T> apply, SessionChange change)
+    private async Task LiveSectionsLoopAsync(string token, TaskCompletionSource<PollOutcome> stop, CancellationToken ct)
+    {
+        while (!stop.Task.IsCompleted)
         {
-            if (stop.Task.IsCompleted)
-                return;
-            var r = await _api.SectionAsync<T>(Port, section, token, ct).ConfigureAwait(false);
-            if (Handle(r, stop, ref unreachable))
+            if (!_noWallet
+                && await FetchSectionAsync<Wallet>("wallet", v => Wallet = v, SessionChange.Wallet, stop, token, ct) == 404)
+                _noWallet = true;
+
+            if (!_noEquipment
+                && await FetchSectionAsync<List<EquipmentSlot>>("equipment", v => Equipment = v, SessionChange.Equipment, stop, token, ct) == 404)
             {
-                apply(r.Value!.Data);
-                Raise(change);
+                _noEquipment = true;
+                // Older client: fetch the inventory right away instead of waiting for the next 60 s round.
+                await FetchSectionAsync<List<InventoryItem>>("inventory", v => Inventory = v, SessionChange.Inventory, stop, token, ct);
             }
+
+            if (_noWallet && _noEquipment)
+                return;
+            await Task.Delay(LiveSectionInterval, ct).ConfigureAwait(false);
         }
+    }
+
+    // Shared by both section loops: they hit the same port, so either one failing in a row counts.
+    private int _sectionsUnreachable;
+
+    /// <summary>Fetches one account section and applies it. Returns the HTTP status (0 = unreachable).</summary>
+    private async Task<int> FetchSectionAsync<T>(string section, Action<T> apply, SessionChange change,
+        TaskCompletionSource<PollOutcome> stop, string token, CancellationToken ct)
+    {
+        if (stop.Task.IsCompleted)
+            return 0;
+        var r = await _api.SectionAsync<T>(Port, section, token, ct).ConfigureAwait(false);
+        if (r.StatusCode == 404)
+            return 404; // endpoint missing in this client's API version: not an error for the session
+        if (Handle(r, stop, ref _sectionsUnreachable))
+        {
+            apply(r.Value!.Data);
+            Raise(change);
+        }
+        return r.StatusCode;
     }
 
     /// <summary>Returns true when the result carries data; otherwise decides whether polling must stop.</summary>

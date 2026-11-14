@@ -165,6 +165,40 @@ public partial class SessionViewModel : ViewModelBase
 
     public string ServerText => Account?.Server is { Length: > 0 } s ? Capitalize(s) : "—";
 
+    // ---- currencies: /v1/wallet is live (API v3); /v1/account (cached ~60 s) until it answers ----
+
+    [ObservableProperty] public partial Wallet? Wallet { get; private set; }
+
+    public string CoinsText => (Wallet?.Coins ?? Account?.Coins) is { } v ? $"{v:N0}" : "—";
+    public string DiamondsText => (Wallet?.Diamonds ?? Account?.Diamonds) is { } v ? $"{v:N0}" : "—";
+    public string EnergyText => (Wallet?.Energy ?? Account?.Energy) is { } v ? $"{v:N0}" : "—";
+
+    private void NotifyCurrencies()
+    {
+        OnPropertyChanged(nameof(CoinsText));
+        OnPropertyChanged(nameof(DiamondsText));
+        OnPropertyChanged(nameof(EnergyText));
+    }
+
+    /// <summary>Total coins to repair everything equipped (0 = nothing to repair, or an older client).</summary>
+    public long RepairAllPrice => EquippedItems?.Sum(i => i.Item.RepairPrice) ?? 0;
+    public bool HasRepairAll => RepairAllPrice > 0;
+    public string RepairAllText => $"Repair all: {RepairAllPrice:N0} coins";
+
+    /// <summary>Equipped items from /v1/equipment, or from the inventory on clients without it.</summary>
+    private void RebuildEquippedItems()
+    {
+        var slots = Session.Equipment
+                    ?? Session.Inventory?.Where(i => i.Equipped).Select(EquipmentSlot.FromInventory).ToList();
+        EquippedItems = slots?
+            .OrderBy(i => i.Slot)
+            .Select(i => new EquippedItemViewModel(i))
+            .ToList();
+        OnPropertyChanged(nameof(RepairAllPrice));
+        OnPropertyChanged(nameof(HasRepairAll));
+        OnPropertyChanged(nameof(RepairAllText));
+    }
+
     private static string Capitalize(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
 
     public int OpenQuestCount => Quests?.Count(q => !q.IsDone) ?? 0;
@@ -233,6 +267,12 @@ public partial class SessionViewModel : ViewModelBase
             OnPropertyChanged(nameof(GuildText));
             OnPropertyChanged(nameof(RatingText));
             OnPropertyChanged(nameof(ServerText));
+            NotifyCurrencies();
+        }
+        if (change.HasFlag(SessionChange.Wallet))
+        {
+            Wallet = Session.Wallet;
+            NotifyCurrencies();
         }
         if (change.HasFlag(SessionChange.Profile))
         {
@@ -246,14 +286,10 @@ public partial class SessionViewModel : ViewModelBase
             OnPropertyChanged(nameof(OpenQuestCount));
         }
         if (change.HasFlag(SessionChange.Inventory))
-        {
             Inventory = Session.Inventory;
-            EquippedItems = Inventory?
-                .Where(i => i.Equipped)
-                .OrderBy(i => i.Slot)
-                .Select(i => new EquippedItemViewModel(i))
-                .ToList();
-        }
+        // Inventory too: it's the fallback source, and RefreshItemIcons uses it to rebuild the rows.
+        if (change.HasFlag(SessionChange.Equipment) || change.HasFlag(SessionChange.Inventory))
+            RebuildEquippedItems();
         if (change.HasFlag(SessionChange.BattlePass))
         {
             BattlePass = Session.BattlePass;

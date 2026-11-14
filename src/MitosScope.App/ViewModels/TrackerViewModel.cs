@@ -84,7 +84,7 @@ public partial class TrackerViewModel : ViewModelBase
     public void RefreshItemIcons()
     {
         foreach (var session in Sessions)
-            session.Refresh(SessionChange.Inventory);
+            session.Refresh(SessionChange.Equipment);
     }
 
     private int? _focusedProcessId;

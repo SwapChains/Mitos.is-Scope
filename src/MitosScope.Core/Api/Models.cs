@@ -82,6 +82,42 @@ public sealed record InventoryItem
     public int Slot { get; init; } = -1;
 }
 
+/// <summary>/v1/wallet (API v3). Not cached by the server, unlike the coins in /v1/account.</summary>
+public sealed record Wallet
+{
+    public long Coins { get; init; }
+    public long Diamonds { get; init; }
+    public long Energy { get; init; }
+}
+
+/// <summary>One equipped slot from /v1/equipment (API v3). Not cached by the server.</summary>
+public sealed record EquipmentSlot
+{
+    public int Slot { get; init; } = -1;
+    public long Id { get; init; }
+    public string? Name { get; init; }
+    public string? Type { get; init; }
+    public int Category { get; init; }
+    public string? Sprite { get; init; }
+    public long Durability { get; init; }
+    public long MaxDurability { get; init; }
+    /// <summary>Coins to repair it; 0 when it isn't damaged or can't be repaired.</summary>
+    public long RepairPrice { get; init; }
+
+    /// <summary>Fallback for clients without /v1/equipment: an equipped item from /v1/inventory (no repair price).</summary>
+    public static EquipmentSlot FromInventory(InventoryItem i) => new()
+    {
+        Slot = i.Slot,
+        Id = i.Id,
+        Name = i.Name,
+        Type = i.Type,
+        Category = i.Category,
+        Sprite = i.Sprite,
+        Durability = i.Durability,
+        MaxDurability = i.MaxDurability,
+    };
+}
+
 /// <summary>/v1/achievements. Not polled for now (no panel uses it).</summary>
 public sealed record Achievement
 {

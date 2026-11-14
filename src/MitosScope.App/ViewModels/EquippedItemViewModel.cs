@@ -6,10 +6,10 @@ using MitosScope.Core.Api;
 
 namespace MitosScope.App.ViewModels;
 
-/// <summary>One equipped item as shown in the Equipment panel (immutable; rebuilt on each inventory poll).</summary>
-public sealed partial class EquippedItemViewModel(InventoryItem item)
+/// <summary>One equipped item as shown in the Equipment panel (immutable; rebuilt on each equipment poll).</summary>
+public sealed partial class EquippedItemViewModel(EquipmentSlot item)
 {
-    public InventoryItem Item { get; } = item;
+    public EquipmentSlot Item { get; } = item;
     public string Name { get; } = CleanName(item.Name);
 
     /// <summary>Drops rarity tags like "* SPECIAL *", "* LIMITED *", "* SUPER LIMITED *".</summary>
@@ -41,4 +41,8 @@ public sealed partial class EquippedItemViewModel(InventoryItem item)
 
     public bool IsLow => HasDurability && DurabilityFraction <= 0.25;
     public bool IsMedium => HasDurability && DurabilityFraction is > 0.25 and <= 0.5;
+
+    /// <summary>repair_price (API v3) is 0 when the item isn't damaged or can't be repaired.</summary>
+    public bool CanRepair => Item.RepairPrice > 0;
+    public string RepairText => CanRepair ? $"Repair: {Item.RepairPrice:N0} coins" : "";
 }
