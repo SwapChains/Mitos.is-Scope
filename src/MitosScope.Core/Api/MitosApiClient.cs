@@ -43,8 +43,16 @@ public sealed class MitosApiClient : IDisposable
     public Task<ApiResult<HelloInfo>> HelloAsync(int port, TimeSpan timeout, CancellationToken ct) =>
         SendAsync<HelloInfo>(port, HttpMethod.Get, "/v1/hello", null, null, timeout, ct);
 
-    public Task<ApiResult<AuthResponse>> AuthAsync(int port, string appKey, CancellationToken ct) =>
-        SendAsync<AuthResponse>(port, HttpMethod.Post, "/v1/auth", new { app_key = appKey }, null, DefaultTimeout, ct);
+    /// <summary><paramref name="scopes"/>: extended permissions to ask for (API v3), e.g. "shop".</summary>
+    public Task<ApiResult<AuthResponse>> AuthAsync(int port, string appKey, IReadOnlyList<string> scopes, CancellationToken ct) =>
+        SendAsync<AuthResponse>(port, HttpMethod.Post, "/v1/auth",
+            scopes.Count > 0 ? (object)new { app_key = appKey, scopes } : new { app_key = appKey }, null, DefaultTimeout, ct);
+
+    public Task<ApiResult<ShopCategories>> ShopAsync(int port, string token, CancellationToken ct) =>
+        SendAsync<ShopCategories>(port, HttpMethod.Get, "/v1/shop", null, token, DefaultTimeout, ct);
+
+    public Task<ApiResult<ShopItems>> ShopItemsAsync(int port, int category, string token, CancellationToken ct) =>
+        SendAsync<ShopItems>(port, HttpMethod.Get, $"/v1/shop/items?category={category}", null, token, DefaultTimeout, ct);
 
     public Task<ApiResult<GameState>> GameAsync(int port, string token, CancellationToken ct) =>
         SendAsync<GameState>(port, HttpMethod.Get, "/v1/game", null, token, TimeSpan.FromSeconds(5), ct);

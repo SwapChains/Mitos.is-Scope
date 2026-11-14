@@ -48,8 +48,10 @@ public partial class App : Application
             var tracker = new TrackerViewModel();
             StartSessions(tracker);
 
-            _overlay = new OverlayManager(_settings, CreatePanels(tracker));
+            var shop = new ShopViewModel(tracker);
+            _overlay = new OverlayManager(_settings, CreatePanels(tracker, shop));
             _overlay.ShowAll();
+            _overlay.AttachShop(shop);
 
             _focus = new FocusController(_sessions, tracker, _overlay);
             _focus.Start();
@@ -73,7 +75,7 @@ public partial class App : Application
     }
 
     /// <summary>Register new panels here.</summary>
-    private static PanelViewModel[] CreatePanels(TrackerViewModel tracker) =>
+    private static PanelViewModel[] CreatePanels(TrackerViewModel tracker, ShopViewModel shop) =>
     [
         new StatusPanelViewModel(tracker),
         new GamePanelViewModel(tracker),
@@ -82,6 +84,7 @@ public partial class App : Application
         new EquipmentPanelViewModel(tracker),
         new ProfilePanelViewModel(tracker),
         new BattlePassPanelViewModel(tracker),
+        new ShopPanelViewModel(tracker, shop),
     ];
 
     private void StartSessions(TrackerViewModel tracker)

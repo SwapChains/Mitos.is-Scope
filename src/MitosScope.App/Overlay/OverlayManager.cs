@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using MitosScope.App.Settings;
+using MitosScope.App.ViewModels;
 using MitosScope.App.ViewModels.Panels;
 
 namespace MitosScope.App.Overlay;
@@ -17,6 +18,7 @@ namespace MitosScope.App.Overlay;
 ///   edit mode ignores this so every enabled panel can be arranged;
 /// - the overlay isn't hidden as a whole (tray "Show overlay");
 /// - the focus allows it (a game client is focused, or edit mode is on — see FocusController).
+/// It also owns the big shop window (<see cref="AttachShop"/>).
 /// Must be used on the UI thread.
 /// </summary>
 public sealed class OverlayManager
@@ -60,7 +62,7 @@ public sealed class OverlayManager
             window.Opened += (_, _) =>
             {
                 EnsureOnScreen(window, panel);
-                WindowInterop.SetClickThrough(window, !IsEditMode);
+                ApplyInputMode(window);
                 CaptureLayout(window);
                 // Track the layout live: on exit the windows are already closed (and report 0,0).
                 window.PositionChanged += (_, _) => CaptureLayout(window);
@@ -115,6 +117,8 @@ public sealed class OverlayManager
         if (_inMatch == inMatch)
             return;
         _inMatch = inMatch;
+        if (inMatch)
+            _shop?.Close(); // the big window would cover the game
         ApplyVisibility();
     }
 
@@ -150,6 +154,7 @@ public sealed class OverlayManager
             else if (!show && window.IsVisible)
                 window.Hide();
         }
+        ApplyShopVisibility();
     }
 
     // ---- edit mode --------------------------------------------------------------------------
@@ -165,7 +170,7 @@ public sealed class OverlayManager
         foreach (var window in _windows.Values)
         {
             window.Panel.IsEditMode = enabled;
-            WindowInterop.SetClickThrough(window, !enabled);
+            ApplyInputMode(window);
         }
 
         if (!enabled)
@@ -174,6 +179,68 @@ public sealed class OverlayManager
         ApplyVisibility(); // edit mode shows every enabled panel, whatever the game state
 
         EditModeChanged?.Invoke(enabled);
+    }
+
+    /// <summary>
+    /// Edit mode: normal window (drag/resize). Locked: click-through, except interactive panels,
+    /// which take clicks; neither ever takes the focus from the game.
+    /// </summary>
+    private void ApplyInputMode(PanelWindow window)
+    {
+        if (IsEditMode)
+            WindowInterop.SetInputMode(window, clickThrough: false, noActivate: false);
+        else
+            WindowInterop.SetInputMode(window, clickThrough: !window.Panel.IsInteractive, noActivate: true);
+    }
+
+    // ---- shop window --------------------------------------------------------------------------
+
+    private ShopViewModel? _shop;
+    private ShopWindow? _shopWindow;
+
+    /// <summary>
+    /// The big shop window, opened by the small Shop panel. Shown in the middle of the screen while
+    /// open and the overlay is visible; closed when the player enters a match (it covers the game).
+    /// </summary>
+    public void AttachShop(ShopViewModel shop)
+    {
+        _shop = shop;
+        _shopWindow = new ShopWindow(shop);
+        _shopWindow.Opened += (_, _) => WindowInterop.SetInputMode(_shopWindow, clickThrough: false, noActivate: true);
+        shop.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ShopViewModel.IsOpen))
+                ApplyVisibility();
+        };
+        ApplyVisibility();
+    }
+
+    private void ApplyShopVisibility()
+    {
+        if (_shop is null || _shopWindow is null)
+            return;
+        var show = _shop.IsOpen && _focusVisible && IsOverlayShown;
+        if (show && !_shopWindow.IsVisible)
+        {
+            CenterShopWindow();
+            _shopWindow.Show(); // ShowActivated=False: doesn't steal focus from the game
+        }
+        else if (!show && _shopWindow.IsVisible)
+            _shopWindow.Hide();
+    }
+
+    /// <summary>Middle of the screen that has the Shop panel (the primary screen if it's hidden).</summary>
+    private void CenterShopWindow()
+    {
+        var window = _shopWindow!;
+        var anchor = _windows.GetValueOrDefault("shop") is { IsVisible: true } p ? p : null;
+        var screen = (anchor is not null ? anchor.Screens.ScreenFromWindow(anchor) : null) ?? window.Screens.Primary;
+        if (screen is null)
+            return;
+        var area = screen.WorkingArea;
+        var w = (int)(window.Width * screen.Scaling);
+        var h = (int)(window.Height * screen.Scaling);
+        window.Position = new PixelPoint(area.X + (area.Width - w) / 2, area.Y + (area.Height - h) / 2);
     }
 
     // ---- layout -----------------------------------------------------------------------------

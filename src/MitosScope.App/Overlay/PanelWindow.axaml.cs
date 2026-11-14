@@ -13,6 +13,7 @@ public partial class PanelWindow : Window
     private const double ResizeMargin = 7;
 
     private static readonly Cursor MoveCursor = new(StandardCursorType.SizeAll);
+    private static readonly Cursor HandCursor = new(StandardCursorType.Hand);
     private static readonly Cursor WestEastCursor = new(StandardCursorType.SizeWestEast);
     private static readonly Cursor NorthSouthCursor = new(StandardCursorType.SizeNorthSouth);
     private static readonly Cursor TopLeftCursor = new(StandardCursorType.TopLeftCorner);
@@ -39,8 +40,19 @@ public partial class PanelWindow : Window
 
     private void OnPanelPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!Panel.IsEditMode || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             return;
+
+        if (!Panel.IsEditMode)
+        {
+            // Only interactive panels get clicks outside edit mode (the others are click-through).
+            if (Panel.IsClickable)
+            {
+                Panel.OnClicked();
+                e.Handled = true;
+            }
+            return;
+        }
 
         if (EdgeAt(e.GetPosition(this)) is { } edge)
             BeginResizeDrag(edge, e);
@@ -52,7 +64,10 @@ public partial class PanelWindow : Window
     {
         if (!Panel.IsEditMode)
         {
-            Root.ClearValue(CursorProperty);
+            if (Panel.IsClickable)
+                Root.Cursor = HandCursor;
+            else
+                Root.ClearValue(CursorProperty);
             return;
         }
 

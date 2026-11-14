@@ -1,0 +1,111 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MitosScope.App.ViewModels"
+             xmlns:api="using:MitosScope.Core.Api"
+             x:Class="MitosScope.App.Views.ShopView"
+             x:DataType="vm:ShopViewModel">
+    <UserControl.Styles>
+        <Style Selector="Button.flat">
+            <Setter Property="Background" Value="#20FFFFFF" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.category">
+            <Setter Property="Width" Value="160" />
+            <Setter Property="Height" Value="48" />
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <!-- Items the player can't buy (level, achievement or coins missing) are dimmed. -->
+        <Style Selector="Border.item.locked">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+        <Style Selector="Border.item.owned">
+            <Setter Property="BorderBrush" Value="#8040C060" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel>
+        <!-- Header: back (items page), title, coins, close -->
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" Margin="0,0,0,10">
+            <Button Classes="flat" Content="‹ Categories" Padding="8,3" FontSize="12"
+                    IsVisible="{Binding IsItemsPage}" Command="{Binding BackCommand}" />
+            <TextBlock Grid.Column="1" Classes="title" FontSize="18" VerticalAlignment="Center"
+                       Text="{Binding TitleText}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="2" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFD060" VerticalAlignment="Center"
+                       Text="{Binding CoinsText}" IsVisible="{Binding HasCoins}" />
+            <Button Grid.Column="3" Classes="flat" Width="24" Height="24" Padding="0"
+                    Background="#40FF4D4D" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                    ToolTip.Tip="Close the shop" Command="{Binding CloseCommand}">
+                <TextBlock Text="✕" FontSize="12" />
+            </Button>
+        </Grid>
+
+        <!-- Loading / error -->
+        <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8" IsVisible="{Binding IsLoading}">
+            <TextBlock Classes="muted" Text="Loading…" />
+            <ProgressBar IsIndeterminate="True" />
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8" IsVisible="{Binding HasError}">
+            <TextBlock Classes="error" Text="{Binding ErrorText}" />
+            <Button Classes="flat" Content="Try again" Padding="10,3" FontSize="12"
+                    IsVisible="{Binding CanBrowse}" Command="{Binding RetryCommand}" />
+        </StackPanel>
+
+        <Panel>
+            <!-- Page 1: categories -->
+            <ScrollViewer IsVisible="{Binding IsCategoriesPage}" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Categories}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="api:ShopCategory">
+                            <Button Classes="flat category"
+                                    Command="{Binding $parent[UserControl].((vm:ShopViewModel)DataContext).OpenCategoryCommand}"
+                                    CommandParameter="{Binding}">
+                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Page 2: items of the selected category -->
+            <ScrollViewer IsVisible="{Binding IsItemsPage}" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ShopItemViewModel">
+                            <Border Classes="item" Classes.locked="{Binding IsLocked}" Classes.owned="{Binding IsOwned}"
+                                    Width="160" Margin="0,0,8,8" Padding="8" CornerRadius="6"
+                                    Background="#20FFFFFF" BorderBrush="#30FFFFFF" BorderThickness="1"
+                                    ToolTip.Tip="{Binding Description}">
+                                <StackPanel Spacing="3">
+                                    <Border Width="56" Height="56" CornerRadius="4" Background="#20FFFFFF" HorizontalAlignment="Center">
+                                        <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="3" />
+                                    </Border>
+                                    <TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Name}"
+                                               TextAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock FontSize="12" Foreground="#FFFFD060" Text="{Binding PriceText}" TextAlignment="Center" />
+                                    <TextBlock FontSize="11" Foreground="#A0FFFFFF" Text="{Binding StateText}"
+                                               TextAlignment="Center" IsVisible="{Binding HasStateText}" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Panel>
+    </DockPanel>
+</UserControl>
