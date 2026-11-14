@@ -25,7 +25,8 @@ public abstract partial class PanelViewModel(TrackerViewModel tracker) : ViewMod
 
     /// <summary>
     /// Takes clicks outside edit mode (instead of letting them through to the game); a click calls
-    /// <see cref="OnClicked"/>. Still never takes the focus from the game.
+    /// <see cref="OnClicked"/>. Still never takes the focus from the game. To open a big card in
+    /// the middle of the screen from the click, call Toggle() on a PopupViewModel (see ShopPanelViewModel).
     /// </summary>
     public virtual bool IsInteractive => false;
 

@@ -1,9 +1,9 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MitosScope.App.ViewModels"
-        x:Class="MitosScope.App.Overlay.ShopWindow"
-        x:DataType="vm:ShopViewModel"
-        Title="Shop"
+        x:Class="MitosScope.App.Overlay.PopupWindow"
+        x:DataType="vm:PopupViewModel"
+        Title="{Binding Title}"
         WindowDecorations="None"
         TransparencyLevelHint="Transparent"
         Background="Transparent"
@@ -11,10 +11,10 @@
         ShowInTaskbar="False"
         ShowActivated="False"
         CanResize="False"
-        Width="720" Height="520">
+        Width="{Binding Width}" Height="{Binding Height}">
 
-    <!-- Big card in the middle of the screen, opened by the small Shop panel. Clickable, but never
-         takes the focus from the game (see OverlayManager / WindowInterop.SetInputMode). -->
+    <!-- Big card in the middle of the screen for any PopupViewModel (its view comes from ViewLocator).
+         Clickable, but never takes the focus from the game (see OverlayManager / WindowInterop.SetInputMode). -->
     <Border Classes="panel" Background="#E8101418">
         <ContentControl Content="{Binding}" Margin="14,10" />
     </Border>

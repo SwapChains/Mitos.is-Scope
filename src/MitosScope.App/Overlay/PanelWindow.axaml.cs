@@ -36,6 +36,9 @@ public partial class PanelWindow : Window
     /// <summary>The ✕ button was clicked (edit mode). OverlayManager hides and saves.</summary>
     public event Action? CloseRequested;
 
+    /// <summary>An interactive panel was clicked outside edit mode (raised before Panel.OnClicked).</summary>
+    public event Action? Clicked;
+
     private void OnCloseClick(object? sender, RoutedEventArgs e) => CloseRequested?.Invoke();
 
     private void OnPanelPressed(object? sender, PointerPressedEventArgs e)
@@ -48,6 +51,7 @@ public partial class PanelWindow : Window
             // Only interactive panels get clicks outside edit mode (the others are click-through).
             if (Panel.IsClickable)
             {
+                Clicked?.Invoke(); // first: OverlayManager opens popups on this window's screen
                 Panel.OnClicked();
                 e.Handled = true;
             }

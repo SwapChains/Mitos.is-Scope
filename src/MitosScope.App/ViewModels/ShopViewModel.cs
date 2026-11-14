@@ -11,12 +11,11 @@ using MitosScope.Core.Api;
 namespace MitosScope.App.ViewModels;
 
 /// <summary>
-/// The shop browser (API v3, needs the "shop" permission): the small Shop panel opens it, and it
-/// shows in a big window in the middle of the screen (see Overlay/ShopWindow). First page: the
-/// categories; clicking one shows its items in the same window. Read-only for now (no buying).
-/// Everything is loaded when shown, never polled. Use on the UI thread.
+/// The shop browser (API v3, needs the "shop" permission): a popup opened by the small Shop panel.
+/// First page: the categories; clicking one shows its items in the same window. Read-only for now
+/// (no buying). Everything is loaded when shown, never polled. Use on the UI thread.
 /// </summary>
-public partial class ShopViewModel : ViewModelBase
+public partial class ShopViewModel : PopupViewModel
 {
     private SessionViewModel? _session;
     private CancellationTokenSource? _loadCts;
@@ -30,8 +29,7 @@ public partial class ShopViewModel : ViewModelBase
 
     public TrackerViewModel Tracker { get; }
 
-    /// <summary>The big window is open. OverlayManager shows/hides it.</summary>
-    [ObservableProperty] public partial bool IsOpen { get; private set; }
+    public override string Title => "Shop";
 
     [ObservableProperty] public partial IReadOnlyList<ShopCategory>? Categories { get; private set; }
 
@@ -73,33 +71,17 @@ public partial class ShopViewModel : ViewModelBase
 
     // ---- commands -------------------------------------------------------------------------------
 
-    /// <summary>Clicking the small Shop panel.</summary>
-    public void Toggle()
+    protected override void OnOpened()
     {
-        if (IsOpen)
-            Close();
-        else
-            Open();
-    }
-
-    public void Open()
-    {
-        if (IsOpen)
-            return;
-        IsOpen = true;
         SelectedCategory = null;
         Items = null;
         OnPropertyChanged(nameof(CardText));
         _ = LoadCategoriesAsync();
     }
 
-    [RelayCommand]
-    public void Close()
+    protected override void OnClosed()
     {
-        if (!IsOpen)
-            return;
         CancelLoad();
-        IsOpen = false;
         IsLoading = false;
         OnPropertyChanged(nameof(CardText));
     }

@@ -18,7 +18,7 @@ namespace MitosScope.App.Overlay;
 ///   edit mode ignores this so every enabled panel can be arranged;
 /// - the overlay isn't hidden as a whole (tray "Show overlay");
 /// - the focus allows it (a game client is focused, or edit mode is on — see FocusController).
-/// It also owns the big shop window (<see cref="AttachShop"/>).
+/// It also owns the popup windows, the big cards opened by clickable panels (<see cref="AttachPopups"/>).
 /// Must be used on the UI thread.
 /// </summary>
 public sealed class OverlayManager
@@ -69,6 +69,7 @@ public sealed class OverlayManager
                 window.SizeChanged += (_, _) => CaptureLayout(window);
             };
             window.CloseRequested += () => SetPanelEnabled(panel, false);
+            window.Clicked += () => _lastClicked = window;
             _windows[panel.Id] = window;
         }
         ApplyVisibility();
@@ -118,7 +119,8 @@ public sealed class OverlayManager
             return;
         _inMatch = inMatch;
         if (inMatch)
-            _shop?.Close(); // the big window would cover the game
+            foreach (var window in _popups.Where(w => w.Popup.CloseInMatch))
+                window.Popup.Close(); // a big card would cover the game
         ApplyVisibility();
     }
 
@@ -154,7 +156,7 @@ public sealed class OverlayManager
             else if (!show && window.IsVisible)
                 window.Hide();
         }
-        ApplyShopVisibility();
+        ApplyPopupsVisibility();
     }
 
     // ---- edit mode --------------------------------------------------------------------------
@@ -193,53 +195,63 @@ public sealed class OverlayManager
             WindowInterop.SetInputMode(window, clickThrough: !window.Panel.IsInteractive, noActivate: true);
     }
 
-    // ---- shop window --------------------------------------------------------------------------
+    // ---- popups (big cards in the middle of the screen) ----------------------------------------
 
-    private ShopViewModel? _shop;
-    private ShopWindow? _shopWindow;
+    private readonly List<PopupWindow> _popups = [];
+
+    /// <summary>The last interactive panel clicked: popups open on its screen.</summary>
+    private PanelWindow? _lastClicked;
 
     /// <summary>
-    /// The big shop window, opened by the small Shop panel. Shown in the middle of the screen while
-    /// open and the overlay is visible; closed when the player enters a match (it covers the game).
+    /// Creates the windows of the popups (see PopupViewModel). Each one shows in the middle of the
+    /// screen while open and the overlay is visible. Only one is open at a time, and those with
+    /// CloseInMatch are closed when the player enters a match.
     /// </summary>
-    public void AttachShop(ShopViewModel shop)
+    public void AttachPopups(IEnumerable<PopupViewModel> popups)
     {
-        _shop = shop;
-        _shopWindow = new ShopWindow(shop);
-        _shopWindow.Opened += (_, _) => WindowInterop.SetInputMode(_shopWindow, clickThrough: false, noActivate: true);
-        shop.PropertyChanged += (_, e) =>
+        foreach (var popup in popups)
         {
-            if (e.PropertyName == nameof(ShopViewModel.IsOpen))
+            var window = new PopupWindow(popup);
+            window.Opened += (_, _) => WindowInterop.SetInputMode(window, clickThrough: false, noActivate: true);
+            popup.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName != nameof(PopupViewModel.IsOpen))
+                    return;
+                if (popup.IsOpen)
+                    foreach (var other in _popups.Where(o => o.Popup != popup))
+                        other.Popup.Close();
                 ApplyVisibility();
-        };
+            };
+            _popups.Add(window);
+        }
         ApplyVisibility();
     }
 
-    private void ApplyShopVisibility()
+    private void ApplyPopupsVisibility()
     {
-        if (_shop is null || _shopWindow is null)
-            return;
-        var show = _shop.IsOpen && _focusVisible && IsOverlayShown;
-        if (show && !_shopWindow.IsVisible)
+        foreach (var window in _popups)
         {
-            CenterShopWindow();
-            _shopWindow.Show(); // ShowActivated=False: doesn't steal focus from the game
+            var show = window.Popup.IsOpen && _focusVisible && IsOverlayShown;
+            if (show && !window.IsVisible)
+            {
+                Center(window);
+                window.Show(); // ShowActivated=False: doesn't steal focus from the game
+            }
+            else if (!show && window.IsVisible)
+                window.Hide();
         }
-        else if (!show && _shopWindow.IsVisible)
-            _shopWindow.Hide();
     }
 
-    /// <summary>Middle of the screen that has the Shop panel (the primary screen if it's hidden).</summary>
-    private void CenterShopWindow()
+    /// <summary>Middle of the screen of the panel that opened it (the primary screen as a fallback).</summary>
+    private void Center(PopupWindow window)
     {
-        var window = _shopWindow!;
-        var anchor = _windows.GetValueOrDefault("shop") is { IsVisible: true } p ? p : null;
+        var anchor = _lastClicked is { IsVisible: true } p ? p : _windows.Values.FirstOrDefault(w => w.IsVisible);
         var screen = (anchor is not null ? anchor.Screens.ScreenFromWindow(anchor) : null) ?? window.Screens.Primary;
         if (screen is null)
             return;
         var area = screen.WorkingArea;
-        var w = (int)(window.Width * screen.Scaling);
-        var h = (int)(window.Height * screen.Scaling);
+        var w = (int)(window.Popup.Width * screen.Scaling);
+        var h = (int)(window.Popup.Height * screen.Scaling);
         window.Position = new PixelPoint(area.X + (area.Width - w) / 2, area.Y + (area.Height - h) / 2);
     }
 
