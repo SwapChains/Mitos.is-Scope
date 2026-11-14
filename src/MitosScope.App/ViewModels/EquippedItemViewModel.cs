@@ -13,7 +13,7 @@ public sealed partial class EquippedItemViewModel(EquipmentSlot item)
     public string Name { get; } = CleanName(item.Name);
 
     /// <summary>Drops rarity tags like "* SPECIAL *", "* LIMITED *", "* SUPER LIMITED *".</summary>
-    private static string CleanName(string? name)
+    internal static string CleanName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
             return "?";

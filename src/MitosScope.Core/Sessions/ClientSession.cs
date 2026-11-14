@@ -50,6 +50,12 @@ public sealed class ClientSession
     private static readonly TimeSpan WatchInterval = TimeSpan.FromSeconds(5);
     private const int MaxUnreachable = 3;
 
+    /// <summary>
+    /// Extended permissions asked in /v1/auth (API v3). "shop" is needed even just to browse the shop.
+    /// If the player refuses it (or the key doesn't have it) the token still works for everything else.
+    /// </summary>
+    private static readonly string[] RequestedScopes = ["shop"];
+
     private readonly MitosApiClient _api;
     private readonly string _appKey;
     private string? _token; // never exposed or persisted (ADDON_API.md §8)
@@ -70,6 +76,12 @@ public sealed class ClientSession
 
     public SessionStatus Status { get; private set; } = SessionStatus.Authenticating;
     public string? LastError { get; private set; }
+
+    /// <summary>While <see cref="SessionStatus.WaitingConsent"/>: which popup is open ("shop" for the shop one, null for the basic one).</summary>
+    public string? PendingScope { get; private set; }
+
+    /// <summary>The player allowed the shop permission (and our key has it). Changes raise <see cref="SessionChange.Status"/>.</summary>
+    public bool HasShopScope { get; private set; }
 
     public GameState? Game { get; private set; }
     public AccountInfo? Account { get; private set; }
@@ -134,12 +146,15 @@ public sealed class ClientSession
 
         while (true)
         {
-            var r = await _api.AuthAsync(Port, _appKey, ct).ConfigureAwait(false);
+            var r = await _api.AuthAsync(Port, _appKey, RequestedScopes, ct).ConfigureAwait(false);
 
             if (r.StatusCode == 200 && r.Value?.Token is { Length: > 0 } token)
             {
                 _token = token;
                 LastError = null;
+                PendingScope = null;
+                HasShopScope = r.Value.Scopes?.Contains("shop") == true;
+                Raise(SessionChange.Status); // scopes may change even if the status doesn't
                 return SetStatus(SessionStatus.Connected);
             }
 
@@ -147,6 +162,11 @@ public sealed class ClientSession
             {
                 case 202:
                     unreachable = 0;
+                    if (PendingScope != r.Value?.Scope)
+                    {
+                        PendingScope = r.Value?.Scope; // basic consent first, then the shop popup
+                        Raise(SessionChange.Status);
+                    }
                     SetStatus(SessionStatus.WaitingConsent);
                     await Task.Delay(AuthPollInterval, ct).ConfigureAwait(false);
                     continue;
@@ -324,6 +344,29 @@ public sealed class ClientSession
             // 5xx / 504 / bad payload: keep the previous data and try again next tick.
         }
         return false;
+    }
+
+    // ---- shop (on demand, needs the "shop" permission) -------------------------------------
+    // Not routed through Handle(): a shop 403 (scope missing/revoked) must not end the session.
+
+    public Task<ApiResult<ShopCategories>> GetShopCategoriesAsync(CancellationToken ct) =>
+        ShopCallAsync((token, c) => _api.ShopAsync(Port, token, c), ct);
+
+    public Task<ApiResult<ShopItems>> GetShopItemsAsync(int category, CancellationToken ct) =>
+        ShopCallAsync((token, c) => _api.ShopItemsAsync(Port, category, token, c), ct);
+
+    private async Task<ApiResult<T>> ShopCallAsync<T>(Func<string, CancellationToken, Task<ApiResult<T>>> call, CancellationToken ct)
+    {
+        if (Status != SessionStatus.Connected || _token is not { } token)
+            return new ApiResult<T>(0, default, "not_connected");
+
+        var r = await call(token, ct).ConfigureAwait(false);
+        if (r.StatusCode == 403 && r.Error is "scope_required" or "addon_scope_revoked" && HasShopScope)
+        {
+            HasShopScope = false;
+            Raise(SessionChange.Status);
+        }
+        return r;
     }
 
     // ---- helpers --------------------------------------------------------------------------

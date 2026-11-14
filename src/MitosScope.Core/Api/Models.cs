@@ -9,7 +9,12 @@ namespace MitosScope.Core.Api;
 
 public sealed record HelloInfo(string Game, int ApiVersion, int Slot, int Port, string ClientVersion);
 
-public sealed record AuthResponse(string? Token, string? Status, string? App, string? Error);
+/// <summary>
+/// /v1/auth. API v3: "scopes" lists the extended permissions granted (e.g. ["shop"], or [] when
+/// refused / not enabled for the key); a 202 while the shop popup is open carries "scope": "shop".
+/// </summary>
+public sealed record AuthResponse(string? Token, string? Status, string? App, string? Error,
+    IReadOnlyList<string>? Scopes = null, string? Scope = null);
 
 public sealed record ErrorResponse(string? Error);
 
@@ -117,6 +122,37 @@ public sealed record EquipmentSlot
         MaxDurability = i.MaxDurability,
     };
 }
+
+// ---- shop (API v3, needs the "shop" permission) ----
+
+public sealed record ShopCategory(int Id, string? Name);
+
+/// <summary>GET /v1/shop. Names are in the player's language.</summary>
+public sealed record ShopCategories(IReadOnlyList<ShopCategory> Categories);
+
+public sealed record ShopItem
+{
+    public long Id { get; init; }
+    public string? Name { get; init; }
+    public string? Description { get; init; }
+    public string? Type { get; init; }
+    public int Category { get; init; }
+    public bool Passive { get; init; }
+    public string? Sprite { get; init; }
+    /// <summary>Player level required.</summary>
+    public long Level { get; init; }
+    public long ItemLevel { get; init; }
+    /// <summary>Coins, already with the player's discounts.</summary>
+    public long Price { get; init; }
+    /// <summary>Uses one purchase gives (consumables).</summary>
+    public long Pack { get; init; }
+    public bool Owned { get; init; }
+    /// <summary>Has the level, the achievement and the coins, and doesn't own it yet.</summary>
+    public bool CanBuy { get; init; }
+}
+
+/// <summary>GET /v1/shop/items?category=N</summary>
+public sealed record ShopItems(int Category, long Coins, IReadOnlyList<ShopItem> Items);
 
 /// <summary>/v1/achievements. Not polled for now (no panel uses it).</summary>
 public sealed record Achievement

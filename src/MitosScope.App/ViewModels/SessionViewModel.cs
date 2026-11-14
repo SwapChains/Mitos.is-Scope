@@ -31,9 +31,13 @@ public partial class SessionViewModel : ViewModelBase
 
     public bool IsConnected => Status == SessionStatus.Connected;
 
+    /// <summary>Connected with the shop permission (API v3 "shop" scope).</summary>
+    public bool HasShopScope => IsConnected && Session.HasShopScope;
+
     public string StatusText => Status switch
     {
         SessionStatus.Authenticating => "Connecting…",
+        SessionStatus.WaitingConsent when Session.PendingScope == "shop" => "Click \"Allow\" in the game (shop permission)",
         SessionStatus.WaitingConsent => "Click \"Allow\" in the game",
         SessionStatus.Connected => "Connected",
         SessionStatus.Denied => "Permission denied. Restart the game to try again.",
@@ -239,6 +243,7 @@ public partial class SessionViewModel : ViewModelBase
             Status = Session.Status;
             OnPropertyChanged(nameof(StatusText));
             OnPropertyChanged(nameof(IsConnected));
+            OnPropertyChanged(nameof(HasShopScope));
         }
         if (change.HasFlag(SessionChange.Game))
         {
