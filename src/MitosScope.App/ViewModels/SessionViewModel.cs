@@ -165,20 +165,14 @@ public partial class SessionViewModel : ViewModelBase
 
     public string ServerText => Account?.Server is { Length: > 0 } s ? Capitalize(s) : "—";
 
-    // ---- currencies: /v1/wallet is live (API v3); /v1/account (cached ~60 s) until it answers ----
+    // ---- coins: /v1/wallet is live (API v3); /v1/account (cached ~60 s) until it answers ----
+    // Diamonds and energy aren't shown: their values didn't look right in the game (2026-11).
 
     [ObservableProperty] public partial Wallet? Wallet { get; private set; }
 
     public string CoinsText => (Wallet?.Coins ?? Account?.Coins) is { } v ? $"{v:N0}" : "—";
-    public string DiamondsText => (Wallet?.Diamonds ?? Account?.Diamonds) is { } v ? $"{v:N0}" : "—";
-    public string EnergyText => (Wallet?.Energy ?? Account?.Energy) is { } v ? $"{v:N0}" : "—";
 
-    private void NotifyCurrencies()
-    {
-        OnPropertyChanged(nameof(CoinsText));
-        OnPropertyChanged(nameof(DiamondsText));
-        OnPropertyChanged(nameof(EnergyText));
-    }
+    private void NotifyCurrencies() => OnPropertyChanged(nameof(CoinsText));
 
     /// <summary>Total coins to repair everything equipped (0 = nothing to repair, or an older client).</summary>
     public long RepairAllPrice => EquippedItems?.Sum(i => i.Item.RepairPrice) ?? 0;

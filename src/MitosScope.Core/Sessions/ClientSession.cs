@@ -37,7 +37,7 @@ public enum SessionChange
 
 /// <summary>
 /// One logged-in game client (one slot/port): authenticates, then polls /v1/game every second,
-/// the uncached wallet and equipment every 15 s and the cached account sections every 60 s,
+/// the uncached wallet and equipment every 15 s and on each death, the cached account sections every 60 s,
 /// re-authenticating on 401. <see cref="RunAsync"/> ends when the client goes away.
 /// </summary>
 public sealed class ClientSession
@@ -216,6 +216,9 @@ public sealed class ClientSession
             var r = await _api.GameAsync(Port, token, ct).ConfigureAwait(false);
             if (Handle(r, stop, ref unreachable))
             {
+                // Death (alive true -> false): coins and durability just changed, refresh them now.
+                if (Game?.Alive == true && !r.Value!.Alive)
+                    RequestLiveRefresh();
                 Game = r.Value;
                 Raise(Matches.OnGame(r.Value!) ? SessionChange.Game | SessionChange.LastMatch : SessionChange.Game);
             }
@@ -259,8 +262,18 @@ public sealed class ClientSession
 
             if (_noWallet && _noEquipment)
                 return;
-            await Task.Delay(LiveSectionInterval, ct).ConfigureAwait(false);
+            // Every 15 s, or right away when the player dies (RequestLiveRefresh).
+            await _liveRefresh.WaitAsync(LiveSectionInterval, ct).ConfigureAwait(false);
         }
+    }
+
+    private readonly SemaphoreSlim _liveRefresh = new(0, 1);
+
+    /// <summary>Wakes the wallet/equipment loop early. Several requests before it runs count as one.</summary>
+    private void RequestLiveRefresh()
+    {
+        try { _liveRefresh.Release(); }
+        catch (SemaphoreFullException) { } // already requested
     }
 
     // Shared by both section loops: they hit the same port, so either one failing in a row counts.

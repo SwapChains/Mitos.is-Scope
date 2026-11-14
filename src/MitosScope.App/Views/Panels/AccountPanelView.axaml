@@ -18,25 +18,19 @@
             </TextBlock>
             <ProgressBar Minimum="0" Maximum="1" Value="{Binding Tracker.Current.ExpProgress}" />
 
-            <!-- Coins, diamonds and energy come from /v1/wallet (live) once it answers. -->
-            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="2" Margin="0,4,0,0">
+            <!-- Coins come from /v1/wallet (live) once it answers. -->
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="2" Margin="0,4,0,0">
                 <TextBlock Grid.Row="0" Classes="label" Text="Coins" />
                 <TextBlock Grid.Row="0" Grid.Column="1" Classes="value" Text="{Binding Tracker.Current.CoinsText}" />
 
-                <TextBlock Grid.Row="1" Classes="label" Text="Diamonds" />
-                <TextBlock Grid.Row="1" Grid.Column="1" Classes="value" Text="{Binding Tracker.Current.DiamondsText}" />
+                <TextBlock Grid.Row="1" Classes="label" Text="Rating" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Classes="value" Text="{Binding Tracker.Current.RatingText}" />
 
-                <TextBlock Grid.Row="2" Classes="label" Text="Energy" />
-                <TextBlock Grid.Row="2" Grid.Column="1" Classes="value" Text="{Binding Tracker.Current.EnergyText}" />
+                <TextBlock Grid.Row="2" Classes="label" Text="Guild" />
+                <TextBlock Grid.Row="2" Grid.Column="1" Classes="value" Text="{Binding Tracker.Current.GuildText}" />
 
-                <TextBlock Grid.Row="3" Classes="label" Text="Rating" />
-                <TextBlock Grid.Row="3" Grid.Column="1" Classes="value" Text="{Binding Tracker.Current.RatingText}" />
-
-                <TextBlock Grid.Row="4" Classes="label" Text="Guild" />
-                <TextBlock Grid.Row="4" Grid.Column="1" Classes="value" Text="{Binding Tracker.Current.GuildText}" />
-
-                <TextBlock Grid.Row="5" Classes="label" Text="Server" />
-                <TextBlock Grid.Row="5" Grid.Column="1" Classes="value" Text="{Binding Tracker.Current.ServerText}" />
+                <TextBlock Grid.Row="3" Classes="label" Text="Server" />
+                <TextBlock Grid.Row="3" Grid.Column="1" Classes="value" Text="{Binding Tracker.Current.ServerText}" />
             </Grid>
         </StackPanel>
     </StackPanel>
