@@ -84,6 +84,10 @@ public sealed class SessionManager : IAsyncDisposable
         return _watcher?.IsGameProcess(processId) ?? false;
     }
 
+    /// <summary>The session whose game window is <paramref name="hwnd"/> (see ClientSession.WindowHandle).</summary>
+    public ClientSession? FindByWindow(long hwnd) =>
+        hwnd == 0 ? null : _sessions.Values.FirstOrDefault(s => s.WindowHandle == hwnd);
+
     public void Start()
     {
         if (_loop is not null)

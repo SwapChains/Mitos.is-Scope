@@ -23,6 +23,62 @@
             <Setter Property="BorderBrush" Value="#FF3BA7FF" />
         </Style>
 
+        <!-- Clickable panels (e.g. Shop) light up under the mouse outside edit mode. -->
+        <Style Selector="Border.panel.clickable:pointerover">
+            <Setter Property="Background" Value="#D0182028" />
+            <Setter Property="BorderBrush" Value="#80FFFFFF" />
+        </Style>
+
+        <!-- Buttons: one look for every button we draw, in the panels ("overlayButton") and in the
+             popup cards ("flat"): same translucent white normally, brighter under the mouse and pressed. -->
+        <Style Selector="Button.overlayButton, Button.flat">
+            <Setter Property="Background" Value="#18FFFFFF" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.overlayButton:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.flat:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#38FFFFFF" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.overlayButton:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.flat:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#58FFFFFF" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.overlayButton:disabled /template/ ContentPresenter#PART_ContentPresenter, Button.flat:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#10FFFFFF" />
+        </Style>
+        <Style Selector="Button.flat">
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+        <!-- Red variant (close ✕), same transparency steps. -->
+        <Style Selector="Button.flat.danger">
+            <Setter Property="Background" Value="#40FF4D4D" />
+        </Style>
+        <Style Selector="Button.flat.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#70FF4D4D" />
+        </Style>
+        <Style Selector="Button.flat.danger:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#90FF4D4D" />
+        </Style>
+
+        <!-- Small buttons inside a click-through panel (e.g. Repair in Equipment). The panel stays
+             click-through except while the mouse is over one of them (OverlayManager hot buttons).
+             The negative margin cancels the padding, so the text sits where a plain TextBlock would. -->
+        <Style Selector="Button.overlayButton">
+            <Setter Property="Padding" Value="3,0" />
+            <Setter Property="Margin" Value="-3,0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+        </Style>
+        <!-- In edit mode a press on them drags the panel like anywhere else. -->
+        <Style Selector="Border.panel.editing Button.overlayButton">
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+
         <Style Selector="TextBlock.label">
             <Setter Property="Foreground" Value="#A0FFFFFF" />
             <Setter Property="FontSize" Value="12" />

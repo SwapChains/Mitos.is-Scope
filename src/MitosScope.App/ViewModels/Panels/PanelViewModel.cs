@@ -20,7 +20,32 @@ public abstract partial class PanelViewModel(TrackerViewModel tracker) : ViewMod
     public abstract PanelLayout DefaultLayout { get; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsClickable))]
     public partial bool IsEditMode { get; set; }
+
+    /// <summary>
+    /// Takes clicks outside edit mode (instead of letting them through to the game); a click calls
+    /// <see cref="OnClicked"/>. Still never takes the focus from the game. To open a big card in
+    /// the middle of the screen from the click, call Toggle() on a PopupViewModel (see ShopPanelViewModel).
+    /// </summary>
+    public virtual bool IsInteractive => false;
+
+    /// <summary>Clickable right now: in edit mode a click drags the panel instead.</summary>
+    public bool IsClickable => IsInteractive && !IsEditMode;
+
+    public virtual void OnClicked() { }
+}
+
+/// <summary>Small clickable card that opens the shop window (see ShopViewModel).</summary>
+public sealed class ShopPanelViewModel(TrackerViewModel tracker, ShopViewModel shop) : PanelViewModel(tracker)
+{
+    public ShopViewModel Shop { get; } = shop;
+    public override string Id => "shop";
+    public override string Title => "Shop";
+    // Menu only by default: in a match a clickable card would catch clicks meant for the game.
+    public override PanelLayout DefaultLayout => new() { X = 600, Y = 280, Width = 200, Height = 70, ShowInMatch = false };
+    public override bool IsInteractive => true;
+    public override void OnClicked() => Shop.Toggle();
 }
 
 public sealed class StatusPanelViewModel(TrackerViewModel tracker) : PanelViewModel(tracker)

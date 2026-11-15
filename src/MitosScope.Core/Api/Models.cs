@@ -9,9 +9,17 @@ namespace MitosScope.Core.Api;
 
 public sealed record HelloInfo(string Game, int ApiVersion, int Slot, int Port, string ClientVersion);
 
-public sealed record AuthResponse(string? Token, string? Status, string? App, string? Error);
+/// <summary>
+/// /v1/auth. API v3: "scopes" lists the extended permissions granted (e.g. ["shop"], or [] when
+/// refused / not enabled for the key); a 202 while the shop popup is open carries "scope": "shop".
+/// </summary>
+public sealed record AuthResponse(string? Token, string? Status, string? App, string? Error,
+    IReadOnlyList<string>? Scopes = null, string? Scope = null);
 
 public sealed record ErrorResponse(string? Error);
+
+/// <summary>/v1/hwnd (API v5 doc): the main game window. Fixed while the game runs; 0 outside Windows.</summary>
+public sealed record GameWindowInfo(long Hwnd, string? Hex);
 
 public sealed record SectionResponse<T>(string Section, long Time, T Data);
 
@@ -81,6 +89,76 @@ public sealed record InventoryItem
     public bool Equipped { get; init; }
     public int Slot { get; init; } = -1;
 }
+
+/// <summary>/v1/wallet (API v3). Not cached by the server, unlike the coins in /v1/account.</summary>
+public sealed record Wallet
+{
+    public long Coins { get; init; }
+    public long Diamonds { get; init; }
+    public long Energy { get; init; }
+}
+
+/// <summary>One equipped slot from /v1/equipment (API v3). Not cached by the server.</summary>
+public sealed record EquipmentSlot
+{
+    public int Slot { get; init; } = -1;
+    public long Id { get; init; }
+    public string? Name { get; init; }
+    public string? Type { get; init; }
+    public int Category { get; init; }
+    public string? Sprite { get; init; }
+    public long Durability { get; init; }
+    public long MaxDurability { get; init; }
+    /// <summary>Coins to repair it; 0 when it isn't damaged or can't be repaired.</summary>
+    public long RepairPrice { get; init; }
+
+    /// <summary>Fallback for clients without /v1/equipment: an equipped item from /v1/inventory (no repair price).</summary>
+    public static EquipmentSlot FromInventory(InventoryItem i) => new()
+    {
+        Slot = i.Slot,
+        Id = i.Id,
+        Name = i.Name,
+        Type = i.Type,
+        Category = i.Category,
+        Sprite = i.Sprite,
+        Durability = i.Durability,
+        MaxDurability = i.MaxDurability,
+    };
+}
+
+// ---- shop (API v3, needs the "shop" permission) ----
+
+public sealed record ShopCategory(int Id, string? Name);
+
+/// <summary>GET /v1/shop. Names are in the player's language.</summary>
+public sealed record ShopCategories(IReadOnlyList<ShopCategory> Categories);
+
+public sealed record ShopItem
+{
+    public long Id { get; init; }
+    public string? Name { get; init; }
+    public string? Description { get; init; }
+    public string? Type { get; init; }
+    public int Category { get; init; }
+    public bool Passive { get; init; }
+    public string? Sprite { get; init; }
+    /// <summary>Player level required.</summary>
+    public long Level { get; init; }
+    public long ItemLevel { get; init; }
+    /// <summary>Coins, already with the player's discounts.</summary>
+    public long Price { get; init; }
+    /// <summary>Uses one purchase gives (consumables).</summary>
+    public long Pack { get; init; }
+    public bool Owned { get; init; }
+    /// <summary>Has the level, the achievement and the coins, and doesn't own it yet.</summary>
+    public bool CanBuy { get; init; }
+}
+
+/// <summary>GET /v1/shop/items?category=N</summary>
+public sealed record ShopItems(int Category, long Coins, IReadOnlyList<ShopItem> Items);
+
+/// <summary>POST /v1/repair: the coins left and the coins actually taken.</summary>
+public sealed record RepairResult(long Coins, long Spent);
 
 /// <summary>/v1/achievements. Not polled for now (no panel uses it).</summary>
 public sealed record Achievement

@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using MitosScope.Core.Api;
 using MitosScope.Core.Sessions;
 using MitosScope.Core.Stats;
@@ -31,9 +34,13 @@ public partial class SessionViewModel : ViewModelBase
 
     public bool IsConnected => Status == SessionStatus.Connected;
 
+    /// <summary>Connected with the shop permission (API v3 "shop" scope).</summary>
+    public bool HasShopScope => IsConnected && Session.HasShopScope;
+
     public string StatusText => Status switch
     {
         SessionStatus.Authenticating => "Connecting…",
+        SessionStatus.WaitingConsent when Session.PendingScope == "shop" => "Click \"Allow\" in the game (shop permission)",
         SessionStatus.WaitingConsent => "Click \"Allow\" in the game",
         SessionStatus.Connected => "Connected",
         SessionStatus.Denied => "Permission denied. Restart the game to try again.",
@@ -165,6 +172,78 @@ public partial class SessionViewModel : ViewModelBase
 
     public string ServerText => Account?.Server is { Length: > 0 } s ? Capitalize(s) : "—";
 
+    // ---- coins: /v1/wallet is live (API v3); /v1/account (cached ~60 s) until it answers ----
+    // Diamonds and energy aren't shown: their values didn't look right in the game (2026-11).
+
+    [ObservableProperty] public partial Wallet? Wallet { get; private set; }
+
+    public string CoinsText => (Wallet?.Coins ?? Account?.Coins) is { } v ? $"{v:N0}" : "—";
+
+    private void NotifyCurrencies() => OnPropertyChanged(nameof(CoinsText));
+
+    /// <summary>Total coins to repair everything equipped (0 = nothing to repair, or an older client).</summary>
+    public long RepairAllPrice => EquippedItems?.Sum(i => i.Item.RepairPrice) ?? 0;
+    public bool HasRepairAll => RepairAllPrice > 0;
+    public string RepairAllText => RepairAllStatus ?? $"Repair all: {RepairAllPrice:N0} coins";
+
+    /// <summary>Shown on the "Repair all" button instead of the price for a few seconds.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RepairAllText))]
+    public partial string? RepairAllStatus { get; private set; }
+
+    /// <summary>How long "Repaired" or an error stays on a repair button.</summary>
+    private static readonly TimeSpan RepairStatusTime = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Repairs one item (parameter) or all the broken equipment (null). Spends coins (API v3, needs
+    /// the shop permission). One repair at a time: every repair button is disabled while it runs.
+    /// </summary>
+    [RelayCommand]
+    private async Task RepairAsync(EquippedItemViewModel? item)
+    {
+        void Show(string? status)
+        {
+            if (item is null)
+                RepairAllStatus = status;
+            else
+                item.RepairStatus = status;
+        }
+
+        Show("Repairing…");
+        var r = await Session.RepairAsync(item?.Item.Id, CancellationToken.None);
+        Show(r.StatusCode is >= 200 and < 300
+            ? r.Value is { Spent: > 0 } v ? $"Repaired (-{v.Spent:N0} coins)" : "Repaired"
+            : RepairErrorText(r.StatusCode, r.Error));
+
+        // On success the equipment refresh replaces the item (its button goes away) anyway.
+        await Task.Delay(RepairStatusTime);
+        Show(null);
+    }
+
+    private static string RepairErrorText(int status, string? error) => (status, error) switch
+    {
+        (0, "not_connected") => "Not connected",
+        (0, _) => "Game not responding",
+        (403, "scope_required" or "addon_scope_revoked") => "No shop permission",
+        (_, "funds_insufficient") => "Not enough coins",
+        (504, _) => "Server timeout, try again",
+        _ => $"Repair failed ({error ?? status.ToString()})",
+    };
+
+    /// <summary>Equipped items from /v1/equipment, or from the inventory on clients without it.</summary>
+    private void RebuildEquippedItems()
+    {
+        var slots = Session.Equipment
+                    ?? Session.Inventory?.Where(i => i.Equipped).Select(EquipmentSlot.FromInventory).ToList();
+        EquippedItems = slots?
+            .OrderBy(i => i.Slot)
+            .Select(i => new EquippedItemViewModel(i, this))
+            .ToList();
+        OnPropertyChanged(nameof(RepairAllPrice));
+        OnPropertyChanged(nameof(HasRepairAll));
+        OnPropertyChanged(nameof(RepairAllText));
+    }
+
     private static string Capitalize(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
 
     public int OpenQuestCount => Quests?.Count(q => !q.IsDone) ?? 0;
@@ -211,6 +290,7 @@ public partial class SessionViewModel : ViewModelBase
             Status = Session.Status;
             OnPropertyChanged(nameof(StatusText));
             OnPropertyChanged(nameof(IsConnected));
+            OnPropertyChanged(nameof(HasShopScope));
         }
         if (change.HasFlag(SessionChange.Game))
         {
@@ -233,6 +313,12 @@ public partial class SessionViewModel : ViewModelBase
             OnPropertyChanged(nameof(GuildText));
             OnPropertyChanged(nameof(RatingText));
             OnPropertyChanged(nameof(ServerText));
+            NotifyCurrencies();
+        }
+        if (change.HasFlag(SessionChange.Wallet))
+        {
+            Wallet = Session.Wallet;
+            NotifyCurrencies();
         }
         if (change.HasFlag(SessionChange.Profile))
         {
@@ -246,14 +332,10 @@ public partial class SessionViewModel : ViewModelBase
             OnPropertyChanged(nameof(OpenQuestCount));
         }
         if (change.HasFlag(SessionChange.Inventory))
-        {
             Inventory = Session.Inventory;
-            EquippedItems = Inventory?
-                .Where(i => i.Equipped)
-                .OrderBy(i => i.Slot)
-                .Select(i => new EquippedItemViewModel(i))
-                .ToList();
-        }
+        // Inventory too: it's the fallback source, and RefreshItemIcons uses it to rebuild the rows.
+        if (change.HasFlag(SessionChange.Equipment) || change.HasFlag(SessionChange.Inventory))
+            RebuildEquippedItems();
         if (change.HasFlag(SessionChange.BattlePass))
         {
             BattlePass = Session.BattlePass;

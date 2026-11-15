@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
+using Avalonia.Threading;
 using MitosScope.App.Settings;
+using MitosScope.App.ViewModels;
 using MitosScope.App.ViewModels.Panels;
 
 namespace MitosScope.App.Overlay;
@@ -17,6 +19,7 @@ namespace MitosScope.App.Overlay;
 ///   edit mode ignores this so every enabled panel can be arranged;
 /// - the overlay isn't hidden as a whole (tray "Show overlay");
 /// - the focus allows it (a game client is focused, or edit mode is on — see FocusController).
+/// It also owns the popup windows, the big cards opened by clickable panels (<see cref="AttachPopups"/>).
 /// Must be used on the UI thread.
 /// </summary>
 public sealed class OverlayManager
@@ -60,16 +63,20 @@ public sealed class OverlayManager
             window.Opened += (_, _) =>
             {
                 EnsureOnScreen(window, panel);
-                WindowInterop.SetClickThrough(window, !IsEditMode);
+                ApplyInputMode(window);
                 CaptureLayout(window);
                 // Track the layout live: on exit the windows are already closed (and report 0,0).
                 window.PositionChanged += (_, _) => CaptureLayout(window);
                 window.SizeChanged += (_, _) => CaptureLayout(window);
             };
             window.CloseRequested += () => SetPanelEnabled(panel, false);
+            window.Clicked += () => _lastClicked = window;
             _windows[panel.Id] = window;
         }
         ApplyVisibility();
+
+        _hotButtonsTimer.Tick += (_, _) => UpdateHotButtons();
+        _hotButtonsTimer.Start();
     }
 
     // ---- visibility -------------------------------------------------------------------------
@@ -115,6 +122,9 @@ public sealed class OverlayManager
         if (_inMatch == inMatch)
             return;
         _inMatch = inMatch;
+        if (inMatch)
+            foreach (var window in _popups.Where(w => w.Popup.CloseInMatch))
+                window.Popup.Close(); // a big card would cover the game
         ApplyVisibility();
     }
 
@@ -150,6 +160,7 @@ public sealed class OverlayManager
             else if (!show && window.IsVisible)
                 window.Hide();
         }
+        ApplyPopupsVisibility();
     }
 
     // ---- edit mode --------------------------------------------------------------------------
@@ -165,7 +176,7 @@ public sealed class OverlayManager
         foreach (var window in _windows.Values)
         {
             window.Panel.IsEditMode = enabled;
-            WindowInterop.SetClickThrough(window, !enabled);
+            ApplyInputMode(window);
         }
 
         if (!enabled)
@@ -174,6 +185,104 @@ public sealed class OverlayManager
         ApplyVisibility(); // edit mode shows every enabled panel, whatever the game state
 
         EditModeChanged?.Invoke(enabled);
+    }
+
+    /// <summary>
+    /// Edit mode: normal window (drag/resize). Locked: click-through, except interactive panels,
+    /// which take clicks; neither ever takes the focus from the game.
+    /// </summary>
+    private void ApplyInputMode(PanelWindow window)
+    {
+        if (IsEditMode)
+            WindowInterop.SetInputMode(window, clickThrough: false, noActivate: false);
+        else
+            WindowInterop.SetInputMode(window, clickThrough: !window.Panel.IsInteractive && !window.IsHot, noActivate: true);
+    }
+
+    // ---- hot buttons: small buttons inside click-through panels -------------------------------
+
+    /// <summary>
+    /// A click-through window gets no mouse events at all, so the mouse position is polled: while
+    /// it's over an overlay button (class "overlayButton", e.g. Repair) that panel takes clicks,
+    /// everywhere else they still go to the game.
+    /// </summary>
+    private readonly DispatcherTimer _hotButtonsTimer = new() { Interval = TimeSpan.FromMilliseconds(40) };
+
+    private void UpdateHotButtons()
+    {
+        if (IsEditMode || !WindowInterop.TryGetCursorPos(out var cursor))
+            return;
+
+        foreach (var window in _windows.Values)
+        {
+            if (window.Panel.IsInteractive)
+                continue; // already takes every click
+            var hot = window.IsOverOverlayButton(cursor);
+            if (hot == window.IsHot)
+                continue;
+            window.IsHot = hot;
+            ApplyInputMode(window);
+        }
+    }
+
+    // ---- popups (big cards in the middle of the screen) ----------------------------------------
+
+    private readonly List<PopupWindow> _popups = [];
+
+    /// <summary>The last interactive panel clicked: popups open on its screen.</summary>
+    private PanelWindow? _lastClicked;
+
+    /// <summary>
+    /// Creates the windows of the popups (see PopupViewModel). Each one shows in the middle of the
+    /// screen while open and the overlay is visible. Only one is open at a time, and those with
+    /// CloseInMatch are closed when the player enters a match.
+    /// </summary>
+    public void AttachPopups(IEnumerable<PopupViewModel> popups)
+    {
+        foreach (var popup in popups)
+        {
+            var window = new PopupWindow(popup);
+            window.Opened += (_, _) => WindowInterop.SetInputMode(window, clickThrough: false, noActivate: true);
+            popup.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName != nameof(PopupViewModel.IsOpen))
+                    return;
+                if (popup.IsOpen)
+                    foreach (var other in _popups.Where(o => o.Popup != popup))
+                        other.Popup.Close();
+                ApplyVisibility();
+            };
+            _popups.Add(window);
+        }
+        ApplyVisibility();
+    }
+
+    private void ApplyPopupsVisibility()
+    {
+        foreach (var window in _popups)
+        {
+            var show = window.Popup.IsOpen && _focusVisible && IsOverlayShown;
+            if (show && !window.IsVisible)
+            {
+                Center(window);
+                window.Show(); // ShowActivated=False: doesn't steal focus from the game
+            }
+            else if (!show && window.IsVisible)
+                window.Hide();
+        }
+    }
+
+    /// <summary>Middle of the screen of the panel that opened it (the primary screen as a fallback).</summary>
+    private void Center(PopupWindow window)
+    {
+        var anchor = _lastClicked is { IsVisible: true } p ? p : _windows.Values.FirstOrDefault(w => w.IsVisible);
+        var screen = (anchor is not null ? anchor.Screens.ScreenFromWindow(anchor) : null) ?? window.Screens.Primary;
+        if (screen is null)
+            return;
+        var area = screen.WorkingArea;
+        var w = (int)(window.Popup.Width * screen.Scaling);
+        var h = (int)(window.Popup.Height * screen.Scaling);
+        window.Position = new PixelPoint(area.X + (area.Width - w) / 2, area.Y + (area.Height - h) / 2);
     }
 
     // ---- layout -----------------------------------------------------------------------------

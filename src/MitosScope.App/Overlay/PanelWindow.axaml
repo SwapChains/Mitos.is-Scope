@@ -19,6 +19,7 @@
     <Border x:Name="Root"
             Classes="panel"
             Classes.editing="{Binding IsEditMode}"
+            Classes.clickable="{Binding IsClickable}"
             PointerPressed="OnPanelPressed"
             PointerMoved="OnPanelPointerMoved">
         <Grid>

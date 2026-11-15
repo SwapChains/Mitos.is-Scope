@@ -1,8 +1,10 @@
 using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using MitosScope.App.ViewModels.Panels;
 
 namespace MitosScope.App.Overlay;
@@ -13,6 +15,7 @@ public partial class PanelWindow : Window
     private const double ResizeMargin = 7;
 
     private static readonly Cursor MoveCursor = new(StandardCursorType.SizeAll);
+    private static readonly Cursor HandCursor = new(StandardCursorType.Hand);
     private static readonly Cursor WestEastCursor = new(StandardCursorType.SizeWestEast);
     private static readonly Cursor NorthSouthCursor = new(StandardCursorType.SizeNorthSouth);
     private static readonly Cursor TopLeftCursor = new(StandardCursorType.TopLeftCorner);
@@ -35,12 +38,52 @@ public partial class PanelWindow : Window
     /// <summary>The ✕ button was clicked (edit mode). OverlayManager hides and saves.</summary>
     public event Action? CloseRequested;
 
+    /// <summary>An interactive panel was clicked outside edit mode (raised before Panel.OnClicked).</summary>
+    public event Action? Clicked;
+
+    /// <summary>
+    /// The mouse is over one of the panel's overlay buttons (class "overlayButton"): while true a
+    /// click-through panel takes clicks (see OverlayManager.UpdateHotButtons).
+    /// </summary>
+    internal bool IsHot { get; set; }
+
+    /// <summary>True if <paramref name="screenPoint"/> (physical pixels) is over a visible overlay button.</summary>
+    internal bool IsOverOverlayButton(PixelPoint screenPoint)
+    {
+        if (!IsVisible)
+            return false;
+        var p = this.PointToClient(screenPoint);
+        if (p.X < 0 || p.Y < 0 || p.X >= Bounds.Width || p.Y >= Bounds.Height)
+            return false;
+
+        // Disabled buttons count too ("Repairing…"): a click on them must not fall through to the game.
+        foreach (var button in this.GetVisualDescendants().OfType<Button>())
+        {
+            if (button.Classes.Contains("overlayButton") && button.IsEffectivelyVisible
+                && button.GetTransformedBounds() is { } tb && tb.Contains(p))
+                return true;
+        }
+        return false;
+    }
+
     private void OnCloseClick(object? sender, RoutedEventArgs e) => CloseRequested?.Invoke();
 
     private void OnPanelPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!Panel.IsEditMode || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             return;
+
+        if (!Panel.IsEditMode)
+        {
+            // Only interactive panels get clicks outside edit mode (the others are click-through).
+            if (Panel.IsClickable)
+            {
+                Clicked?.Invoke(); // first: OverlayManager opens popups on this window's screen
+                Panel.OnClicked();
+                e.Handled = true;
+            }
+            return;
+        }
 
         if (EdgeAt(e.GetPosition(this)) is { } edge)
             BeginResizeDrag(edge, e);
@@ -52,7 +95,10 @@ public partial class PanelWindow : Window
     {
         if (!Panel.IsEditMode)
         {
-            Root.ClearValue(CursorProperty);
+            if (Panel.IsClickable)
+                Root.Cursor = HandCursor;
+            else
+                Root.ClearValue(CursorProperty);
             return;
         }
 

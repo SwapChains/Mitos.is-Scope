@@ -1,0 +1,11 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:panels="using:MitosScope.App.ViewModels.Panels"
+             x:Class="MitosScope.App.Views.Panels.ShopPanelView"
+             x:DataType="panels:ShopPanelViewModel">
+    <!-- The whole card is clickable outside edit mode (PanelWindow calls OnClicked): opens/closes the shop window. -->
+    <StackPanel Spacing="2" VerticalAlignment="Center">
+        <TextBlock Classes="title" Text="Shop" />
+        <TextBlock Classes="muted" Text="{Binding Shop.CardText}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+    </StackPanel>
+</UserControl>
