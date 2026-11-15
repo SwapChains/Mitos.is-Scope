@@ -45,11 +45,16 @@
                          IsIndeterminate="{Binding Tracker.ItemsUpdateIndeterminate}" />
         </StackPanel>
 
-        <!-- Total repair cost of everything equipped (hidden when nothing is damaged). -->
-        <TextBlock DockPanel.Dock="Bottom" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFB020" Margin="0,4,0,0"
-                   Text="{Binding Tracker.Current.RepairAllText, FallbackValue=''}"
-                   IsVisible="{Binding Tracker.Current.HasRepairAll, FallbackValue=False}"
-                   TextTrimming="CharacterEllipsis" />
+        <!-- Repairs everything equipped; shows the total cost (hidden when nothing is damaged). -->
+        <!-- No negative margin here: at the panel's left edge it gets its left corners clipped. -->
+        <Button DockPanel.Dock="Bottom" Classes="overlayButton" Margin="0,4,0,0"
+                IsVisible="{Binding Tracker.Current.HasRepairAll, FallbackValue=False}"
+                Command="{Binding Tracker.Current.RepairCommand, FallbackValue={x:Null}}"
+                CommandParameter="{x:Null}">
+            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#FFFFB020"
+                       Text="{Binding Tracker.Current.RepairAllText, FallbackValue=''}"
+                       TextTrimming="CharacterEllipsis" />
+        </Button>
 
         <ScrollViewer VerticalScrollBarVisibility="Hidden">
             <ItemsControl ItemsSource="{Binding Tracker.Current.EquippedItems}"
@@ -73,9 +78,12 @@
                                                  IsVisible="{Binding HasDurability}"
                                                  Classes.medium="{Binding IsMedium}" Classes.low="{Binding IsLow}" />
                                 </Panel>
-                                <!-- Repair cost (API v3 repair_price), only when the item is damaged. -->
-                                <TextBlock FontSize="11" Foreground="#A0FFFFFF" Text="{Binding RepairText}"
-                                           IsVisible="{Binding CanRepair}" TextTrimming="CharacterEllipsis" />
+                                <!-- Repairs this item; shows its cost (API v3 repair_price), only when damaged. -->
+                                <Button Classes="overlayButton" IsVisible="{Binding CanRepair}"
+                                        Command="{Binding Owner.RepairCommand}" CommandParameter="{Binding}">
+                                    <TextBlock FontSize="11" Foreground="#A0FFFFFF" Text="{Binding RepairText}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </Button>
                             </StackPanel>
                             <!-- Narrow layout: bar on its own line below the sprite, full width. -->
                             <Panel Grid.Row="1" Grid.ColumnSpan="2" Classes="narrowBar" Margin="0,4,0,0">

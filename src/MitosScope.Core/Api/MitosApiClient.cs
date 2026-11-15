@@ -54,6 +54,14 @@ public sealed class MitosApiClient : IDisposable
     public Task<ApiResult<ShopItems>> ShopItemsAsync(int port, int category, string token, CancellationToken ct) =>
         SendAsync<ShopItems>(port, HttpMethod.Get, $"/v1/shop/items?category={category}", null, token, DefaultTimeout, ct);
 
+    /// <summary>Repairs one equipped item, or all the broken equipment when <paramref name="itemId"/> is null. Spends coins.</summary>
+    public Task<ApiResult<RepairResult>> RepairAsync(int port, long? itemId, string token, CancellationToken ct) =>
+        SendAsync<RepairResult>(port, HttpMethod.Post, "/v1/repair",
+            itemId is { } id ? (object)new { item = id } : new { all = true }, token, DefaultTimeout, ct);
+
+    public Task<ApiResult<GameWindowInfo>> HwndAsync(int port, string token, CancellationToken ct) =>
+        SendAsync<GameWindowInfo>(port, HttpMethod.Get, "/v1/hwnd", null, token, DefaultTimeout, ct);
+
     public Task<ApiResult<GameState>> GameAsync(int port, string token, CancellationToken ct) =>
         SendAsync<GameState>(port, HttpMethod.Get, "/v1/game", null, token, TimeSpan.FromSeconds(5), ct);
 

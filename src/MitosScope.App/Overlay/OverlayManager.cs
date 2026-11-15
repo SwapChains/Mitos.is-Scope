@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
+using Avalonia.Threading;
 using MitosScope.App.Settings;
 using MitosScope.App.ViewModels;
 using MitosScope.App.ViewModels.Panels;
@@ -73,6 +74,9 @@ public sealed class OverlayManager
             _windows[panel.Id] = window;
         }
         ApplyVisibility();
+
+        _hotButtonsTimer.Tick += (_, _) => UpdateHotButtons();
+        _hotButtonsTimer.Start();
     }
 
     // ---- visibility -------------------------------------------------------------------------
@@ -192,7 +196,33 @@ public sealed class OverlayManager
         if (IsEditMode)
             WindowInterop.SetInputMode(window, clickThrough: false, noActivate: false);
         else
-            WindowInterop.SetInputMode(window, clickThrough: !window.Panel.IsInteractive, noActivate: true);
+            WindowInterop.SetInputMode(window, clickThrough: !window.Panel.IsInteractive && !window.IsHot, noActivate: true);
+    }
+
+    // ---- hot buttons: small buttons inside click-through panels -------------------------------
+
+    /// <summary>
+    /// A click-through window gets no mouse events at all, so the mouse position is polled: while
+    /// it's over an overlay button (class "overlayButton", e.g. Repair) that panel takes clicks,
+    /// everywhere else they still go to the game.
+    /// </summary>
+    private readonly DispatcherTimer _hotButtonsTimer = new() { Interval = TimeSpan.FromMilliseconds(40) };
+
+    private void UpdateHotButtons()
+    {
+        if (IsEditMode || !WindowInterop.TryGetCursorPos(out var cursor))
+            return;
+
+        foreach (var window in _windows.Values)
+        {
+            if (window.Panel.IsInteractive)
+                continue; // already takes every click
+            var hot = window.IsOverOverlayButton(cursor);
+            if (hot == window.IsHot)
+                continue;
+            window.IsHot = hot;
+            ApplyInputMode(window);
+        }
     }
 
     // ---- popups (big cards in the middle of the screen) ----------------------------------------

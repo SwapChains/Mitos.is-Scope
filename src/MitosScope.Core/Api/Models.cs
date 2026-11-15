@@ -18,6 +18,9 @@ public sealed record AuthResponse(string? Token, string? Status, string? App, st
 
 public sealed record ErrorResponse(string? Error);
 
+/// <summary>/v1/hwnd (API v5 doc): the main game window. Fixed while the game runs; 0 outside Windows.</summary>
+public sealed record GameWindowInfo(long Hwnd, string? Hex);
+
 public sealed record SectionResponse<T>(string Section, long Time, T Data);
 
 public sealed record GameState
@@ -153,6 +156,9 @@ public sealed record ShopItem
 
 /// <summary>GET /v1/shop/items?category=N</summary>
 public sealed record ShopItems(int Category, long Coins, IReadOnlyList<ShopItem> Items);
+
+/// <summary>POST /v1/repair: the coins left and the coins actually taken.</summary>
+public sealed record RepairResult(long Coins, long Spent);
 
 /// <summary>/v1/achievements. Not polled for now (no panel uses it).</summary>
 public sealed record Achievement

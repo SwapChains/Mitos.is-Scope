@@ -1,4 +1,5 @@
 using MitosScope.Core.Api;
+using MitosScope.Core.Discovery;
 using MitosScope.Core.Stats;
 
 namespace MitosScope.Core.Sessions;
@@ -32,7 +33,9 @@ public enum SessionChange
     BattlePass = 1 << 9,
     Wallet = 1 << 10,
     Equipment = 1 << 11,
-    All = Status | Game | Account | Inventory | Profile | Quests | LastMatch | BattlePass | Wallet | Equipment,
+    /// <summary><see cref="ClientSession.WindowHandle"/> became known.</summary>
+    Window = 1 << 12,
+    All = Status | Game | Account | Inventory | Profile | Quests | LastMatch | BattlePass | Wallet | Equipment | Window,
 }
 
 /// <summary>
@@ -74,6 +77,13 @@ public sealed class ClientSession
     /// <summary>PID of the game process serving this port (null if unknown / not Windows).</summary>
     public int? ProcessId { get; internal set; }
 
+    /// <summary>
+    /// The client's main window (HWND from /v1/hwnd), fetched once after the first login. Null until
+    /// then, on clients without /v1/hwnd, and outside Windows. Ties focus changes to this exact client.
+    /// </summary>
+    public long? WindowHandle { get; private set; }
+    private bool _noHwnd;
+
     public SessionStatus Status { get; private set; } = SessionStatus.Authenticating;
     public string? LastError { get; private set; }
 
@@ -114,6 +124,7 @@ public sealed class ClientSession
                 var status = await AuthenticateAsync(ct).ConfigureAwait(false);
                 if (status == SessionStatus.Connected)
                 {
+                    await FetchWindowAsync(_token!, ct).ConfigureAwait(false);
                     var outcome = await PollAsync(_token!, ct).ConfigureAwait(false);
                     if (outcome == PollOutcome.Reauthenticate)
                         continue;
@@ -188,6 +199,26 @@ public sealed class ClientSession
                     continue;
             }
         }
+    }
+
+    /// <summary>
+    /// Asks the client for its window once: it doesn't change while the game runs. Any failure just
+    /// leaves <see cref="WindowHandle"/> null (focus then falls back to the process id).
+    /// </summary>
+    private async Task FetchWindowAsync(string token, CancellationToken ct)
+    {
+        if (WindowHandle is not null || _noHwnd)
+            return;
+
+        var r = await _api.HwndAsync(Port, token, ct).ConfigureAwait(false);
+        if (r.StatusCode == 404)
+            _noHwnd = true; // older client
+        if (r.Value is not { Hwnd: not 0 } info)
+            return;
+
+        WindowHandle = WindowOwner.RootOwner(info.Hwnd); // same form as the foreground watcher reports
+        ProcessId ??= WindowOwner.FindProcessId(info.Hwnd); // when the port owner lookup failed
+        Raise(SessionChange.Window);
     }
 
     private async Task WatchUntilGoneAsync(CancellationToken ct)
@@ -354,6 +385,25 @@ public sealed class ClientSession
 
     public Task<ApiResult<ShopItems>> GetShopItemsAsync(int category, CancellationToken ct) =>
         ShopCallAsync((token, c) => _api.ShopItemsAsync(Port, category, token, c), ct);
+
+    /// <summary>
+    /// Repairs one equipped item, or all the broken equipment when <paramref name="itemId"/> is null.
+    /// Spends coins. On success the coins are updated right away and wallet/equipment are re-fetched.
+    /// </summary>
+    public async Task<ApiResult<RepairResult>> RepairAsync(long? itemId, CancellationToken ct)
+    {
+        var r = await ShopCallAsync((token, c) => _api.RepairAsync(Port, itemId, token, c), ct).ConfigureAwait(false);
+        if (r.StatusCode is >= 200 and < 300)
+        {
+            if (r.Value is { } v && Wallet is { } w)
+            {
+                Wallet = w with { Coins = v.Coins };
+                Raise(SessionChange.Wallet);
+            }
+            RequestLiveRefresh(); // new durability and repair prices
+        }
+        return r;
+    }
 
     private async Task<ApiResult<T>> ShopCallAsync<T>(Func<string, CancellationToken, Task<ApiResult<T>>> call, CancellationToken ct)
     {

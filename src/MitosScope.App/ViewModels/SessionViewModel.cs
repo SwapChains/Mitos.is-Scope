@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using MitosScope.Core.Api;
 using MitosScope.Core.Sessions;
 using MitosScope.Core.Stats;
@@ -181,7 +184,51 @@ public partial class SessionViewModel : ViewModelBase
     /// <summary>Total coins to repair everything equipped (0 = nothing to repair, or an older client).</summary>
     public long RepairAllPrice => EquippedItems?.Sum(i => i.Item.RepairPrice) ?? 0;
     public bool HasRepairAll => RepairAllPrice > 0;
-    public string RepairAllText => $"Repair all: {RepairAllPrice:N0} coins";
+    public string RepairAllText => RepairAllStatus ?? $"Repair all: {RepairAllPrice:N0} coins";
+
+    /// <summary>Shown on the "Repair all" button instead of the price for a few seconds.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RepairAllText))]
+    public partial string? RepairAllStatus { get; private set; }
+
+    /// <summary>How long "Repaired" or an error stays on a repair button.</summary>
+    private static readonly TimeSpan RepairStatusTime = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Repairs one item (parameter) or all the broken equipment (null). Spends coins (API v3, needs
+    /// the shop permission). One repair at a time: every repair button is disabled while it runs.
+    /// </summary>
+    [RelayCommand]
+    private async Task RepairAsync(EquippedItemViewModel? item)
+    {
+        void Show(string? status)
+        {
+            if (item is null)
+                RepairAllStatus = status;
+            else
+                item.RepairStatus = status;
+        }
+
+        Show("Repairing…");
+        var r = await Session.RepairAsync(item?.Item.Id, CancellationToken.None);
+        Show(r.StatusCode is >= 200 and < 300
+            ? r.Value is { Spent: > 0 } v ? $"Repaired (-{v.Spent:N0} coins)" : "Repaired"
+            : RepairErrorText(r.StatusCode, r.Error));
+
+        // On success the equipment refresh replaces the item (its button goes away) anyway.
+        await Task.Delay(RepairStatusTime);
+        Show(null);
+    }
+
+    private static string RepairErrorText(int status, string? error) => (status, error) switch
+    {
+        (0, "not_connected") => "Not connected",
+        (0, _) => "Game not responding",
+        (403, "scope_required" or "addon_scope_revoked") => "No shop permission",
+        (_, "funds_insufficient") => "Not enough coins",
+        (504, _) => "Server timeout, try again",
+        _ => $"Repair failed ({error ?? status.ToString()})",
+    };
 
     /// <summary>Equipped items from /v1/equipment, or from the inventory on clients without it.</summary>
     private void RebuildEquippedItems()
@@ -190,7 +237,7 @@ public partial class SessionViewModel : ViewModelBase
                     ?? Session.Inventory?.Where(i => i.Equipped).Select(EquipmentSlot.FromInventory).ToList();
         EquippedItems = slots?
             .OrderBy(i => i.Slot)
-            .Select(i => new EquippedItemViewModel(i))
+            .Select(i => new EquippedItemViewModel(i, this))
             .ToList();
         OnPropertyChanged(nameof(RepairAllPrice));
         OnPropertyChanged(nameof(HasRepairAll));

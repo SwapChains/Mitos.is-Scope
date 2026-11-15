@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -89,6 +90,17 @@ public partial class TrackerViewModel : ViewModelBase
 
     private int? _focusedProcessId;
 
+    /// <summary>Raised on the UI thread when a session learns its game window (ClientSession.WindowHandle).</summary>
+    public event Action<SessionViewModel>? SessionWindowKnown;
+
+    /// <summary>The focused game window belongs to <paramref name="session"/>: show it.</summary>
+    public void FocusSession(ClientSession session)
+    {
+        _focusedProcessId = session.ProcessId;
+        if (Sessions.FirstOrDefault(s => s.Session == session) is { } match)
+            Current = match;
+    }
+
     /// <summary>A game client got focus: show the session served by that process (if connected yet).</summary>
     public void FocusProcess(int processId)
     {
@@ -102,7 +114,12 @@ public partial class TrackerViewModel : ViewModelBase
         // Subscribe first, then pull everything: data that arrived before this Post ran
         // (e.g. auth answered instantly) would otherwise be lost until the next poll.
         var vm = new SessionViewModel(session);
-        session.Changed += (_, change) => Dispatcher.UIThread.Post(() => vm.Refresh(change));
+        session.Changed += (_, change) => Dispatcher.UIThread.Post(() =>
+        {
+            vm.Refresh(change);
+            if (change.HasFlag(SessionChange.Window) && Sessions.Contains(vm))
+                SessionWindowKnown?.Invoke(vm);
+        });
         vm.Refresh(SessionChange.All);
 
         var index = 0;
@@ -113,6 +130,14 @@ public partial class TrackerViewModel : ViewModelBase
         // The focused client wins; otherwise just make sure something is selected.
         if (Current is null || (_focusedProcessId is not null && vm.Session.ProcessId == _focusedProcessId))
             Current = vm;
+
+        // Window learned before this ran: its Changed event was raised before the subscription above.
+        if (session.WindowHandle is not null)
+            SessionWindowKnown?.Invoke(vm);
+
+        // Window learned before this ran: its Changed event was raised before the subscription above.
+        if (session.WindowHandle is not null)
+            SessionWindowKnown?.Invoke(vm);
     }
 
     private void OnRemoved(ClientSession session)

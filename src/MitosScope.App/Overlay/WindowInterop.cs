@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using Avalonia;
 using Avalonia.Controls;
 
 namespace MitosScope.App.Overlay;
@@ -50,6 +51,27 @@ internal static partial class WindowInterop
         if ((style & WS_EX_LAYERED) == 0 && (newStyle & WS_EX_LAYERED) != 0)
             SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
     }
+
+    /// <summary>The mouse position in screen pixels, read even when our windows don't get the mouse (click-through).</summary>
+    public static bool TryGetCursorPos(out PixelPoint position)
+    {
+        position = default;
+        if (!OperatingSystem.IsWindows() || !GetCursorPos(out var p))
+            return false;
+        position = new PixelPoint(p.X, p.Y);
+        return true;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetCursorPos(out POINT point);
 
     [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     private static partial nint GetWindowLongPtr(nint hWnd, int nIndex);

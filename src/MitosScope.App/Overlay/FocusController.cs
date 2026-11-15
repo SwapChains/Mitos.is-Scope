@@ -7,7 +7,8 @@ namespace MitosScope.App.Overlay;
 
 /// <summary>
 /// Follows the foreground window:
-/// - a game client gets focus → the panels show that client and the overlay is visible;
+/// - a game client gets focus → the panels show that client and the overlay is visible. The client
+///   is found by its window (/v1/hwnd), else by its process (older clients, or before login);
 /// - anything else gets focus → the overlay hides until a game client is focused again.
 /// Edit mode always keeps the overlay visible (otherwise using the tray menu would hide it).
 /// Our own windows never count (ForegroundWatcher skips them).
@@ -19,6 +20,8 @@ public sealed class FocusController : IDisposable
     private readonly TrackerViewModel _tracker;
     private readonly OverlayManager _overlay;
     private bool _gameFocused;
+    private long _foregroundWindow;
+    private int _foregroundProcess;
 
     public FocusController(SessionManager? sessions, TrackerViewModel tracker, OverlayManager overlay)
     {
@@ -34,14 +37,33 @@ public sealed class FocusController : IDisposable
 
         _watcher.ForegroundChanged += OnForegroundChanged;
         _overlay.EditModeChanged += _ => UpdateVisibility();
+        // The window of a client is known only after it logs in: it may already be in the foreground.
+        _tracker.SessionWindowKnown += _ => Evaluate();
         _watcher.Start();
     }
 
-    private void OnForegroundChanged(int processId)
+    private void OnForegroundChanged(long window, int processId)
     {
-        _gameFocused = _sessions!.IsGameProcess(processId);
-        if (_gameFocused)
-            _tracker.FocusProcess(processId);
+        _foregroundWindow = window;
+        _foregroundProcess = processId;
+        Evaluate();
+    }
+
+    private void Evaluate()
+    {
+        if (_foregroundProcess == 0)
+            return; // nothing seen yet
+        if (_sessions!.FindByWindow(_foregroundWindow) is { } session)
+        {
+            _gameFocused = true;
+            _tracker.FocusSession(session);
+        }
+        else
+        {
+            _gameFocused = _sessions.IsGameProcess(_foregroundProcess);
+            if (_gameFocused)
+                _tracker.FocusProcess(_foregroundProcess);
+        }
         UpdateVisibility();
     }
 

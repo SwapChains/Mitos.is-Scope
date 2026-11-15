@@ -1,15 +1,19 @@
 using System;
 using System.Text.RegularExpressions;
 using Avalonia.Media;
+using CommunityToolkit.Mvvm.ComponentModel;
 using MitosScope.App.Services;
 using MitosScope.Core.Api;
 
 namespace MitosScope.App.ViewModels;
 
-/// <summary>One equipped item as shown in the Equipment panel (immutable; rebuilt on each equipment poll).</summary>
-public sealed partial class EquippedItemViewModel(EquipmentSlot item)
+/// <summary>One equipped item as shown in the Equipment panel (rebuilt on each equipment poll).</summary>
+public sealed partial class EquippedItemViewModel(EquipmentSlot item, SessionViewModel owner) : ObservableObject
 {
     public EquipmentSlot Item { get; } = item;
+
+    /// <summary>The session it belongs to: its RepairCommand repairs this item (CommandParameter).</summary>
+    public SessionViewModel Owner { get; } = owner;
     public string Name { get; } = CleanName(item.Name);
 
     /// <summary>Drops rarity tags like "* SPECIAL *", "* LIMITED *", "* SUPER LIMITED *".</summary>
@@ -44,5 +48,10 @@ public sealed partial class EquippedItemViewModel(EquipmentSlot item)
 
     /// <summary>repair_price (API v3) is 0 when the item isn't damaged or can't be repaired.</summary>
     public bool CanRepair => Item.RepairPrice > 0;
-    public string RepairText => CanRepair ? $"Repair: {Item.RepairPrice:N0} coins" : "";
+    public string RepairText => RepairStatus ?? (CanRepair ? $"Repair: {Item.RepairPrice:N0} coins" : "");
+
+    /// <summary>Shown on the repair button instead of the price for a few seconds ("Repairing…", errors).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RepairText))]
+    public partial string? RepairStatus { get; set; }
 }

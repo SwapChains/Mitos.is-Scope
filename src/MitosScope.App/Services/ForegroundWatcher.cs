@@ -14,6 +14,7 @@ public sealed partial class ForegroundWatcher : IDisposable
     private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
     private const uint WINEVENT_SKIPOWNPROCESS = 0x0002;
+    private const uint GA_ROOTOWNER = 3;
 
     private delegate void WinEventProc(nint hWinEventHook, uint eventType, nint hwnd,
         int idObject, int idChild, uint idEventThread, uint dwmsEventTime);
@@ -21,8 +22,11 @@ public sealed partial class ForegroundWatcher : IDisposable
     private WinEventProc? _proc; // kept in a field so the GC doesn't collect the callback
     private nint _hook;
 
-    /// <summary>Raised on the UI thread with the PID that owns the new foreground window.</summary>
-    public event Action<int>? ForegroundChanged;
+    /// <summary>
+    /// Raised on the UI thread with the new foreground window and the PID that owns it. The window
+    /// is the root owner, so a game popup (e.g. the consent dialog) reports the main game window.
+    /// </summary>
+    public event Action<long, int>? ForegroundChanged;
 
     public static bool IsSupported => OperatingSystem.IsWindows();
 
@@ -47,8 +51,10 @@ public sealed partial class ForegroundWatcher : IDisposable
         if (hwnd == 0)
             return;
         _ = GetWindowThreadProcessId(hwnd, out var pid);
-        if (pid != 0 && pid != Environment.ProcessId)
-            ForegroundChanged?.Invoke((int)pid);
+        if (pid == 0 || pid == Environment.ProcessId)
+            return;
+        var root = GetAncestor(hwnd, GA_ROOTOWNER);
+        ForegroundChanged?.Invoke(root != 0 ? root : hwnd, (int)pid);
     }
 
     public void Dispose()
@@ -70,6 +76,9 @@ public sealed partial class ForegroundWatcher : IDisposable
 
     [LibraryImport("user32.dll")]
     private static partial nint GetForegroundWindow();
+
+    [LibraryImport("user32.dll")]
+    private static partial nint GetAncestor(nint hwnd, uint gaFlags);
 
     [LibraryImport("user32.dll")]
     private static partial uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);

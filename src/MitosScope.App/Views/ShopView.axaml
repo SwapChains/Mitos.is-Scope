@@ -5,12 +5,6 @@
              x:Class="MitosScope.App.Views.ShopView"
              x:DataType="vm:ShopViewModel">
     <UserControl.Styles>
-        <Style Selector="Button.flat">
-            <Setter Property="Background" Value="#20FFFFFF" />
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
         <Style Selector="Button.category">
             <Setter Property="Width" Value="160" />
             <Setter Property="Height" Value="48" />
@@ -38,8 +32,8 @@
                        Text="{Binding TitleText}" TextTrimming="CharacterEllipsis" />
             <TextBlock Grid.Column="2" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFD060" VerticalAlignment="Center"
                        Text="{Binding CoinsText}" IsVisible="{Binding HasCoins}" />
-            <Button Grid.Column="3" Classes="flat" Width="24" Height="24" Padding="0"
-                    Background="#40FF4D4D" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+            <Button Grid.Column="3" Classes="flat danger" Width="24" Height="24" Padding="0"
+                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                     ToolTip.Tip="Close the shop" Command="{Binding CloseCommand}">
                 <TextBlock Text="✕" FontSize="12" />
             </Button>
