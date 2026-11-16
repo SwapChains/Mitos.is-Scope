@@ -1,0 +1,210 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MitosScope.App.ViewModels"
+             x:Class="MitosScope.App.Views.GemTrainingView"
+             x:DataType="vm:GemTrainingViewModel">
+    <UserControl.Styles>
+        <Style Selector="Border.slot">
+            <!-- 4 px on both sides: 8 between slots, and nothing past the window's edge. -->
+            <Setter Property="Margin" Value="4,0" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Background" Value="#14FFFFFF" />
+            <Setter Property="BorderBrush" Value="#30FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Border.slot.locked">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+        <Style Selector="Border.slot.completed">
+            <Setter Property="BorderBrush" Value="#A0FFD060" />
+        </Style>
+        <!-- Gem tiles: buttons that open the gem card. -->
+        <Style Selector="Button.item">
+            <Setter Property="Width" Value="120" />
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Button.item.training Border.itemFrame">
+            <Setter Property="BorderBrush" Value="#A040C060" />
+        </Style>
+        <Style Selector="ProgressBar.gemExp">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Height" Value="4" />
+            <Setter Property="MinHeight" Value="4" />
+            <Setter Property="Minimum" Value="0" />
+            <Setter Property="Maximum" Value="1" />
+        </Style>
+        <Style Selector="Button.action">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Background" Value="#5040C060" />
+        </Style>
+        <Style Selector="Button.action:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#8040C060" />
+        </Style>
+        <Style Selector="Button.action:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#A040C060" />
+        </Style>
+    </UserControl.Styles>
+
+    <Panel>
+        <DockPanel>
+            <!-- Header: title, bonus, close -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="0,0,0,10">
+                <TextBlock Classes="title" FontSize="18" VerticalAlignment="Center" Text="Gem Training" />
+                <TextBlock Grid.Column="1" FontSize="12" Foreground="#FFFFD060" VerticalAlignment="Center"
+                           Text="{Binding BonusText}" TextTrimming="CharacterEllipsis" />
+                <Button Grid.Column="2" Classes="flat danger" Width="24" Height="24" Padding="0"
+                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        ToolTip.Tip="Close" Command="{Binding CloseCommand}">
+                    <TextBlock Text="✕" FontSize="12" />
+                </Button>
+            </Grid>
+
+            <!-- Loading / error / nothing to show -->
+            <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" Margin="0,0,0,8"
+                         IsVisible="{Binding IsLoading}" />
+            <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8" IsVisible="{Binding HasError}">
+                <TextBlock Classes="error" Text="{Binding ErrorText}" />
+                <Button Classes="flat" Content="Try again" Padding="10,3" FontSize="12" Command="{Binding RetryCommand}" />
+            </StackPanel>
+            <TextBlock DockPanel.Dock="Top" Classes="muted" Text="{Binding StateText}" IsVisible="{Binding HasStateText}" />
+
+            <!-- The 3 training slots -->
+            <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding Slots}" Margin="0,0,0,12" IsVisible="{Binding HasData}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Rows="1" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GemSlotViewModel">
+                        <Border Classes="slot" Classes.locked="{Binding IsLocked}" Classes.completed="{Binding IsCompleted}">
+                            <StackPanel Spacing="3">
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#C0FFFFFF" Text="{Binding HeaderText}" />
+                                <Grid ColumnDefinitions="44,*" ColumnSpacing="8" IsVisible="{Binding HasGem}">
+                                    <Border Width="44" Height="44" CornerRadius="4" Background="#20FFFFFF">
+                                        <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="3" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                        <TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding GemName}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock FontSize="11" Foreground="#A0FFFFFF" Text="{Binding LevelText}" />
+                                    </StackPanel>
+                                </Grid>
+                                <ProgressBar Classes="gemExp" Value="{Binding ExpFraction}" IsVisible="{Binding HasGem}" />
+                                <TextBlock FontSize="11" Foreground="#A0FFFFFF" Text="{Binding ExpText}" IsVisible="{Binding HasGem}" />
+                                <TextBlock FontSize="11" Text="{Binding EtaText}" IsVisible="{Binding HasEta}" />
+                                <TextBlock FontSize="12" Foreground="#FFFFD060" Text="{Binding StateText}" TextWrapping="Wrap"
+                                           IsVisible="{Binding HasStateText}" />
+                                <TextBlock FontSize="11" Foreground="#A0FFFFFF" Text="{Binding UntilText}" IsVisible="{Binding HasUntil}" />
+                                <TextBlock FontSize="11" Foreground="#FFFFB020" Text="{Binding Status}" TextWrapping="Wrap"
+                                           IsVisible="{Binding HasStatus}" />
+                                <Button Classes="flat" Content="Remove" Padding="8,2" FontSize="11" Margin="0,2,0,0"
+                                        IsVisible="{Binding HasGem}"
+                                        IsEnabled="{Binding !$parent[UserControl].((vm:GemTrainingViewModel)DataContext).IsBusy}"
+                                        Command="{Binding $parent[UserControl].((vm:GemTrainingViewModel)DataContext).RemoveFromSlotCommand}"
+                                        CommandParameter="{Binding}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Owned gems; a click opens the gem card -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" ColumnSpacing="10" Margin="0,0,0,6" IsVisible="{Binding HasData}">
+                <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#C0FFFFFF" Text="Your gems" />
+                <TextBlock Grid.Column="1" Classes="muted" FontSize="11" VerticalAlignment="Center" Text="{Binding RateText}" />
+            </Grid>
+            <TextBlock DockPanel.Dock="Top" Classes="muted" Text="You don't own any gems." IsVisible="{Binding HasNoGems}" />
+
+            <ScrollViewer VerticalScrollBarVisibility="Auto" IsVisible="{Binding HasData}">
+                <ItemsControl ItemsSource="{Binding Gems}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:OwnedGemViewModel">
+                            <Button Classes="flat item" Classes.training="{Binding IsTraining}"
+                                    Command="{Binding $parent[UserControl].((vm:GemTrainingViewModel)DataContext).SelectGemCommand}"
+                                    CommandParameter="{Binding}">
+                                <Border Classes="itemFrame" Padding="6" CornerRadius="6" BorderBrush="#30FFFFFF" BorderThickness="1">
+                                    <StackPanel Spacing="2">
+                                        <Border Width="48" Height="48" CornerRadius="4" Background="#20FFFFFF" HorizontalAlignment="Center">
+                                            <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="3" />
+                                        </Border>
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Text="{Binding Name}"
+                                                   TextAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock FontSize="10" Foreground="#A0FFFFFF" Text="{Binding LevelText}" TextAlignment="Center" />
+                                        <ProgressBar Classes="gemExp" Value="{Binding ExpFraction}" Margin="4,1" />
+                                        <TextBlock FontSize="10" Foreground="#FF60D080" Text="{Binding StateText}"
+                                                   TextAlignment="Center" IsVisible="{Binding HasStateText}" />
+                                    </StackPanel>
+                                </Border>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </DockPanel>
+
+        <!-- Card of the clicked gem, centered. A click outside it closes it. -->
+        <Border Background="#B0000000" CornerRadius="6" Margin="-14,-10"
+                IsVisible="{Binding HasSelectedGem}" PointerPressed="OnBackdropPressed">
+            <Border Width="320" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Padding="16,14" CornerRadius="8" Background="#FF181E24" BorderBrush="#40FFFFFF" BorderThickness="1">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding SelectedGem.Name}"
+                                   TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="flat" Width="24" Height="24" Padding="0" VerticalAlignment="Top"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                ToolTip.Tip="Close" Command="{Binding CloseGemCommand}">
+                            <TextBlock Text="✕" FontSize="12" />
+                        </Button>
+                    </Grid>
+
+                    <Border Width="96" Height="96" CornerRadius="6" Background="#20FFFFFF" HorizontalAlignment="Center">
+                        <Image Source="{Binding SelectedGem.Sprite}" Stretch="Uniform" Margin="6" />
+                    </Border>
+
+                    <TextBlock FontSize="13" TextAlignment="Center" Text="{Binding SelectedGem.LevelText}" />
+                    <ProgressBar Classes="gemExp" Value="{Binding SelectedGem.ExpFraction, FallbackValue=0}" />
+                    <TextBlock FontSize="11" Foreground="#A0FFFFFF" TextAlignment="Center" Text="{Binding SelectedGem.ExpText}" />
+                    <TextBlock FontSize="12" Foreground="#FF60D080" TextAlignment="Center" Text="{Binding SelectedGem.StateText}"
+                               IsVisible="{Binding SelectedGem.HasStateText, FallbackValue=False}" />
+                    <TextBlock FontSize="11" Foreground="#A0FFFFFF" TextAlignment="Center" TextWrapping="Wrap"
+                               Text="{Binding SelectedGem.NotesText}" IsVisible="{Binding SelectedGem.HasNotes, FallbackValue=False}" />
+
+                    <TextBlock FontSize="12" Foreground="#FFFFB020" TextAlignment="Center" TextWrapping="Wrap"
+                               Text="{Binding ActionStatus}" IsVisible="{Binding HasActionStatus}" />
+
+                    <!-- One button per unlocked slot -->
+                    <ItemsControl ItemsSource="{Binding Actions}" Margin="0,4,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:GemSlotAction">
+                                <StackPanel Spacing="2" Margin="0,0,0,6">
+                                    <Button Classes="flat action" Content="{Binding Text}" IsEnabled="{Binding IsEnabled}"
+                                            Command="{Binding $parent[UserControl].((vm:GemTrainingViewModel)DataContext).ApplyActionCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <TextBlock FontSize="11" Foreground="#A0FFFFFF" TextAlignment="Center"
+                                               Text="{Binding Hint}" IsVisible="{Binding HasHint}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock FontSize="11" Foreground="#A0FFFFFF" TextAlignment="Center" TextWrapping="Wrap"
+                               Text="{Binding PermissionHint}" IsVisible="{Binding HasPermissionHint}" />
+                </StackPanel>
+            </Border>
+        </Border>
+    </Panel>
+</UserControl>

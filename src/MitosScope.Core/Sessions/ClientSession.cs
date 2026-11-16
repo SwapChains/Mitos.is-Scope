@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MitosScope.Core.Api;
 using MitosScope.Core.Discovery;
 using MitosScope.Core.Stats;
@@ -34,7 +35,8 @@ public enum SessionChange
     Equipment = 1 << 11,
     /// <summary><see cref="ClientSession.WindowHandle"/> became known.</summary>
     Window = 1 << 12,
-    All = Status | Game | Account | Profile | Quests | LastMatch | BattlePass | Wallet | Equipment | Window,
+    GemTraining = 1 << 13,
+    All = Status | Game | Account | Profile | Quests | LastMatch | BattlePass | Wallet | Equipment | Window | GemTraining,
 }
 
 /// <summary>
@@ -101,11 +103,14 @@ public sealed class ClientSession
     public Wallet? Wallet { get; private set; }
     /// <summary>Null until the first /v1/equipment answer, or if the client doesn't have it (API before v3).</summary>
     public IReadOnlyList<EquipmentSlot>? Equipment { get; private set; }
+    /// <summary>Null until the first /v1/gemtraining answer, or if the client doesn't have it (API before v4).</summary>
+    public GemTraining? GemTraining { get; private set; }
 
     // Set when the client answers 404 (API before v3). A client's API version doesn't change while
     // it runs, so these are never reset.
     private bool _noWallet;
     private bool _noEquipment;
+    private bool _noGemTraining;
 
     /// <summary>Live peak mass and last-match stats, fed by the game poll.</summary>
     public MatchTracker Matches { get; } = new();
@@ -302,7 +307,11 @@ public sealed class ClientSession
                 && await FetchSectionAsync<List<EquipmentSlot>>("equipment", v => Equipment = v, SessionChange.Equipment, stop, token, ct) == 404)
                 _noEquipment = true;
 
-            if (_noWallet && _noEquipment)
+            if (!_noGemTraining
+                && await FetchSectionAsync<GemTraining>("gemtraining", v => GemTraining = v, SessionChange.GemTraining, stop, token, ct) == 404)
+                _noGemTraining = true;
+
+            if (_noWallet && _noEquipment && _noGemTraining)
                 return;
             // Every 15 s, or right away when the player dies (RequestLiveRefresh).
             await _liveRefresh.WaitAsync(LiveSectionInterval, ct).ConfigureAwait(false);
@@ -422,6 +431,57 @@ public sealed class ClientSession
             RequestLiveRefresh();
         }
         return r;
+    }
+
+    /// <summary>Re-reads /v1/gemtraining now (the gem training window opens) instead of waiting for the 15 s poll.</summary>
+    public async Task<ApiResult<SectionResponse<GemTraining>>> RefreshGemTrainingAsync(CancellationToken ct)
+    {
+        var r = await OnDemandCallAsync((token, c) => _api.SectionAsync<GemTraining>(Port, "gemtraining", token, c), ct).ConfigureAwait(false);
+        if (r.IsSuccess && r.Value?.Data is { } data)
+        {
+            GemTraining = data;
+            Raise(SessionChange.GemTraining);
+        }
+        return r;
+    }
+
+    /// <summary>
+    /// Puts a gem in a training slot, or empties the slot when <paramref name="gemId"/> is null (needs
+    /// the shop permission; slot 1 also equips the gem, so 409 "alive" in a match). The answer
+    /// (the new gem training, plus the equipped slots after a change of slot 1) is applied right away.
+    /// </summary>
+    public async Task<ApiResult<GemTraining>> SetGemTrainingAsync(int slot, long? gemId, CancellationToken ct)
+    {
+        var r = await OnDemandCallAsync((token, c) => _api.GemTrainingAsync(Port, slot, gemId, token, c), ct).ConfigureAwait(false);
+        if (r.StatusCode is not (>= 200 and < 300))
+            return new ApiResult<GemTraining>(r.StatusCode, null, r.Error);
+
+        GemTraining? data = null;
+        try
+        {
+            var root = r.Value;
+            // Same object as GET: maybe wrapped like the sections ({section, time, data}), maybe not.
+            var body = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.Object ? d : root;
+            data = body.Deserialize<GemTraining>(MitosJson.Options);
+            if (data is { Equip: null } && root.TryGetProperty("equip", out var e) && e.ValueKind == JsonValueKind.Array)
+                data = data with { Equip = e.Deserialize<List<EquipmentSlot>>(MitosJson.Options) };
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException) { }
+
+        if (data is { Enabled: true })
+        {
+            GemTraining = data with { Equip = null };
+            Raise(SessionChange.GemTraining);
+        }
+        if (data?.Equip is { } equip)
+        {
+            Equipment = equip;
+            Raise(SessionChange.Equipment);
+        }
+        if (data is null)
+            await RefreshGemTrainingAsync(ct).ConfigureAwait(false);
+        RequestLiveRefresh();
+        return new ApiResult<GemTraining>(r.StatusCode, data, null);
     }
 
     /// <summary>

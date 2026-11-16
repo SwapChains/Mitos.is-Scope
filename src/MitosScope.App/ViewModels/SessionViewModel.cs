@@ -31,6 +31,9 @@ public partial class SessionViewModel : ViewModelBase
     [ObservableProperty] public partial IReadOnlyList<Quest>? Quests { get; private set; }
     [ObservableProperty] public partial IReadOnlyList<EquippedItemViewModel>? EquippedItems { get; private set; }
 
+    /// <summary>/v1/gemtraining (API v4), polled with the wallet; null on older clients.</summary>
+    [ObservableProperty] public partial GemTraining? GemTraining { get; private set; }
+
     public bool IsConnected => Status == SessionStatus.Connected;
 
     /// <summary>Connected with the shop permission (API v3 "shop" scope).</summary>
@@ -371,6 +374,8 @@ public partial class SessionViewModel : ViewModelBase
             Wallet = Session.Wallet;
             NotifyCurrencies();
         }
+        if (change.HasFlag(SessionChange.GemTraining))
+            GemTraining = Session.GemTraining;
         if (change.HasFlag(SessionChange.Profile))
         {
             Profile = Session.Profile;

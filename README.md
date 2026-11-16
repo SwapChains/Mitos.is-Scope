@@ -28,6 +28,7 @@ Created by **Chains** ([SwapChains](https://github.com/SwapChains)).
 | **All Time Stats** | Time played, max score, kills, splits, ranked wins / losses | Every 60 s |
 | **Shop** | Click to open the shop window: categories, items with price, buy (several packs at once for consumables) | When opened |
 | **Inventory** | Click to open the inventory window: every owned item by category, equip / unequip (not while alive in a match) | When opened |
+| **Gem Training** | The 3 training slots (gem, level, Gem EXP, time to next level) and the bonus; click to open the window: put gems in slots or remove them | Every 15 s |
 
 ## Requirements
 

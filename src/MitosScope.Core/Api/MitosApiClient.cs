@@ -68,6 +68,15 @@ public sealed class MitosApiClient : IDisposable
             : slot is { } s ? new { item = itemId, slot = s }
             : (object)new { item = itemId }, token, DefaultTimeout, ct);
 
+    /// <summary>
+    /// Puts an owned gem in a gem training slot, or empties the slot when <paramref name="gemId"/> is null.
+    /// The answer is read as raw JSON: the docs say "the same object as GET", which may or may not be
+    /// wrapped in {section, data} (see ClientSession.SetGemTrainingAsync).
+    /// </summary>
+    public Task<ApiResult<JsonElement>> GemTrainingAsync(int port, int slot, long? gemId, string token, CancellationToken ct) =>
+        SendAsync<JsonElement>(port, HttpMethod.Post, "/v1/gemtraining",
+            gemId is { } id ? (object)new { slot, gem = id } : new { slot, remove = true }, token, DefaultTimeout, ct);
+
     /// <summary>Repairs one equipped item, or all the broken equipment when <paramref name="itemId"/> is null. Spends coins.</summary>
     public Task<ApiResult<RepairResult>> RepairAsync(int port, long? itemId, string token, CancellationToken ct) =>
         SendAsync<RepairResult>(port, HttpMethod.Post, "/v1/repair",
