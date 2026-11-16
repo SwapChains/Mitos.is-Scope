@@ -157,6 +157,9 @@ public sealed record ShopItem
 /// <summary>GET /v1/shop/items?category=N</summary>
 public sealed record ShopItems(int Category, long Coins, IReadOnlyList<ShopItem> Items);
 
+/// <summary>POST /v1/shop/buy: the uses the player now has (<c>durability</c>), the coins left and the coins actually taken.</summary>
+public sealed record BuyResult(long Id, string? Name, long Durability, long Coins, long Spent);
+
 /// <summary>POST /v1/repair: the coins left and the coins actually taken.</summary>
 public sealed record RepairResult(long Coins, long Spent);
 

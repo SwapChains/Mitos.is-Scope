@@ -12,8 +12,9 @@ namespace MitosScope.App.ViewModels;
 
 /// <summary>
 /// The shop browser (API v3, needs the "shop" permission): a popup opened by the small Shop panel.
-/// First page: the categories; clicking one shows its items in the same window. Read-only for now
-/// (no buying). Everything is loaded when shown, never polled. Use on the UI thread.
+/// First page: the categories; clicking one shows its items in the same window. Clicking an item
+/// shows its card in the middle of the window, with the Buy button (and how many packs, for
+/// consumables). Everything is loaded when shown, never polled. Use on the UI thread.
 /// </summary>
 public partial class ShopViewModel : PopupViewModel
 {
@@ -46,6 +47,61 @@ public partial class ShopViewModel : PopupViewModel
     public partial long? Coins { get; private set; }
 
     [ObservableProperty] public partial bool IsLoading { get; private set; }
+
+    // ---- item card (buying) ---------------------------------------------------------------------
+
+    /// <summary>Most packs of a consumable bought at once from the card.</summary>
+    public const int MaxQuantity = 30;
+
+    /// <summary>How long "Bought" or an error stays on the Buy button.</summary>
+    private static readonly TimeSpan BuyStatusTime = TimeSpan.FromSeconds(3);
+
+    /// <summary>The item whose card is shown over the list, or null.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedItem), nameof(Quantity), nameof(TotalPrice), nameof(PacksText),
+        nameof(BuyText), nameof(CanPressBuy), nameof(ShowBuy), nameof(ShowQuantity))]
+    public partial ShopItemViewModel? SelectedItem { get; private set; }
+
+    public bool HasSelectedItem => SelectedItem is not null;
+
+    /// <summary>Slider value (1-30). Only consumables have the slider; other items are always 1.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Quantity), nameof(TotalPrice), nameof(PacksText), nameof(BuyText), nameof(CanPressBuy))]
+    public partial double QuantityValue { get; set; } = 1;
+
+    public int Quantity => SelectedItem is { IsConsumable: true } ? Math.Clamp((int)Math.Round(QuantityValue), 1, MaxQuantity) : 1;
+
+    public long TotalPrice => (SelectedItem?.Item.Price ?? 0) * Quantity;
+
+    public bool ShowQuantity => SelectedItem is { IsConsumable: true, IsBuyable: true };
+
+    /// <summary>"3 packs · 15 uses".</summary>
+    public string PacksText
+    {
+        get
+        {
+            var packs = Quantity == 1 ? "1 pack" : $"{Quantity:N0} packs";
+            return SelectedItem?.Item.Pack is > 1 and var p ? $"{packs} · {p * Quantity:N0} uses" : packs;
+        }
+    }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanPressBuy), nameof(BuyText))]
+    public partial bool IsBuying { get; private set; }
+
+    /// <summary>Shown on the Buy button instead of the price for a few seconds ("Buying…", "Bought", errors).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BuyText), nameof(ShowBuy))]
+    public partial string? BuyStatus { get; private set; }
+
+    private bool CanAfford => Coins is not { } c || TotalPrice <= c;
+
+    /// <summary>The Buy button is shown when the item can be bought, or while it shows a result.</summary>
+    public bool ShowBuy => SelectedItem is { IsBuyable: true } || BuyStatus is not null;
+
+    public bool CanPressBuy => SelectedItem is { IsBuyable: true } && CanAfford && !IsBuying && CanBrowse;
+
+    public string BuyText => BuyStatus ?? (CanAfford ? $"Buy · {TotalPrice:N0} coins" : $"Not enough coins ({TotalPrice:N0})");
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasError))]
@@ -81,6 +137,7 @@ public partial class ShopViewModel : PopupViewModel
 
     protected override void OnClosed()
     {
+        CloseItem();
         CancelLoad();
         IsLoading = false;
         OnPropertyChanged(nameof(CardText));
@@ -97,6 +154,7 @@ public partial class ShopViewModel : PopupViewModel
     [RelayCommand]
     private void Back()
     {
+        CloseItem();
         CancelLoad();
         IsLoading = false;
         ErrorText = null;
@@ -104,6 +162,78 @@ public partial class ShopViewModel : PopupViewModel
         Items = null;
         if (Categories is null)
             _ = LoadCategoriesAsync();
+    }
+
+    [RelayCommand]
+    private void SelectItem(ShopItemViewModel item)
+    {
+        if (IsBuying)
+            return;
+        BuyStatus = null;
+        QuantityValue = 1;
+        SelectedItem = item;
+    }
+
+    [RelayCommand]
+    private void CloseItem()
+    {
+        if (IsBuying)
+            return; // keep the card until the answer comes (the coins are being spent)
+        BuyStatus = null;
+        SelectedItem = null;
+    }
+
+    [RelayCommand]
+    private void ChangeQuantity(string delta) =>
+        QuantityValue = Math.Clamp(Quantity + int.Parse(delta), 1, MaxQuantity);
+
+    /// <summary>
+    /// Buys the item of the card (POST /v1/shop/buy, spends coins). The card itself is the
+    /// confirmation: the player clicked the item, saw the price and clicked Buy. Never cancelled
+    /// halfway; afterwards the items are reloaded (owned / can_buy changed) and the card stays open.
+    /// </summary>
+    [RelayCommand]
+    private async Task BuyAsync()
+    {
+        if (!CanPressBuy || SelectedItem is not { } item || _session is not { } session)
+            return;
+        var qty = Quantity;
+        IsBuying = true;
+        BuyStatus = "Buying…";
+        var r = await session.Session.BuyAsync(item.Item.Id, qty, CancellationToken.None);
+        IsBuying = false;
+        if (_session != session)
+            return; // another client is shown now (Watch closed the card)
+
+        var ok = r.StatusCode is >= 200 and < 300;
+        BuyStatus = ok
+            ? r.Value is { Spent: > 0 } v ? $"Bought (-{v.Spent:N0} coins)" : "Bought"
+            : BuyErrorText(r.StatusCode, r.Error);
+        if (ok && r.Value is { } bought)
+            Coins = bought.Coins;
+        if (ok && SelectedCategory is { } category)
+            _ = LoadItemsAsync(category);
+
+        var status = BuyStatus;
+        await Task.Delay(BuyStatusTime);
+        if (BuyStatus == status && !IsBuying)
+            BuyStatus = null;
+    }
+
+    private static string BuyErrorText(int status, string? error) => (status, error) switch
+    {
+        (0, "not_connected") => "Not connected",
+        (0, _) => "Game not responding",
+        (403, "scope_required" or "addon_scope_revoked") => "No shop permission",
+        (_, "funds_insufficient") => "Not enough coins",
+        (504, _) => "Server timeout, try again",
+        _ => $"Purchase failed ({error ?? status.ToString()})",
+    };
+
+    partial void OnCoinsChanged(long? value)
+    {
+        OnPropertyChanged(nameof(CanPressBuy));
+        OnPropertyChanged(nameof(BuyText));
     }
 
     [RelayCommand]
@@ -145,6 +275,10 @@ public partial class ShopViewModel : PopupViewModel
         Items = shop.Items
             .Select(i => new ShopItemViewModel(i, shop.Coins, level))
             .ToList();
+
+        // Reloaded after a purchase: the card shows the item's new state (owned, can_buy).
+        if (SelectedItem is { } selected)
+            SelectedItem = Items.FirstOrDefault(i => i.Item.Id == selected.Item.Id);
     }
 
     /// <summary>Cancels the previous load; returns null (and shows why) when there's nothing to load from.</summary>
@@ -202,6 +336,7 @@ public partial class ShopViewModel : PopupViewModel
         // Another account: its prices, discounts and owned items differ.
         Categories = null;
         Coins = null;
+        IsBuying = false;
         if (IsOpen)
             Back();
         NotifyAccess();
@@ -222,5 +357,6 @@ public partial class ShopViewModel : PopupViewModel
     {
         OnPropertyChanged(nameof(CardText));
         OnPropertyChanged(nameof(CanBrowse));
+        OnPropertyChanged(nameof(CanPressBuy));
     }
 }

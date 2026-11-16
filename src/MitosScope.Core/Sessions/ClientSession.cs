@@ -387,6 +387,25 @@ public sealed class ClientSession
         ShopCallAsync((token, c) => _api.ShopItemsAsync(Port, category, token, c), ct);
 
     /// <summary>
+    /// Buys a shop item (<paramref name="qty"/> purchases of a consumable). Spends coins. On success the
+    /// coins are updated right away and wallet/equipment are re-fetched.
+    /// </summary>
+    public async Task<ApiResult<BuyResult>> BuyAsync(long itemId, int qty, CancellationToken ct)
+    {
+        var r = await ShopCallAsync((token, c) => _api.BuyAsync(Port, itemId, qty, token, c), ct).ConfigureAwait(false);
+        if (r.StatusCode is >= 200 and < 300)
+        {
+            if (r.Value is { } v && Wallet is { } w)
+            {
+                Wallet = w with { Coins = v.Coins };
+                Raise(SessionChange.Wallet);
+            }
+            RequestLiveRefresh(); // a bought consumable can be in a slot already (more uses)
+        }
+        return r;
+    }
+
+    /// <summary>
     /// Repairs one equipped item, or all the broken equipment when <paramref name="itemId"/> is null.
     /// Spends coins. On success the coins are updated right away and wallet/equipment are re-fetched.
     /// </summary>

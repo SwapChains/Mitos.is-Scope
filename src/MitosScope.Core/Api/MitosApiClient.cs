@@ -54,6 +54,10 @@ public sealed class MitosApiClient : IDisposable
     public Task<ApiResult<ShopItems>> ShopItemsAsync(int port, int category, string token, CancellationToken ct) =>
         SendAsync<ShopItems>(port, HttpMethod.Get, $"/v1/shop/items?category={category}", null, token, DefaultTimeout, ct);
 
+    /// <summary>Buys a shop item with coins. <paramref name="qty"/> only matters for consumables (the price is multiplied by it).</summary>
+    public Task<ApiResult<BuyResult>> BuyAsync(int port, long itemId, int qty, string token, CancellationToken ct) =>
+        SendAsync<BuyResult>(port, HttpMethod.Post, "/v1/shop/buy", new { item = itemId, qty }, token, DefaultTimeout, ct);
+
     /// <summary>Repairs one equipped item, or all the broken equipment when <paramref name="itemId"/> is null. Spends coins.</summary>
     public Task<ApiResult<RepairResult>> RepairAsync(int port, long? itemId, string token, CancellationToken ct) =>
         SendAsync<RepairResult>(port, HttpMethod.Post, "/v1/repair",

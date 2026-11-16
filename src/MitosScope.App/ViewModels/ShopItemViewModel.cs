@@ -32,4 +32,16 @@ public sealed class ShopItemViewModel(ShopItem item, long coins, long? playerLev
     };
 
     public bool HasStateText => StateText.Length > 0;
+
+    /// <summary>Consumables (potions, powers) can be bought several packs at once (the qty of /v1/shop/buy).</summary>
+    public bool IsConsumable => Item.Type == "consumable" || Item.Pack > 1;
+
+    /// <summary>
+    /// Whether the Buy button can be pressed. can_buy is false once a consumable is owned, but more packs
+    /// of it can still be bought: then only the level is checked here (the server checks everything).
+    /// </summary>
+    public bool IsBuyable => Item.CanBuy || (IsConsumable && Item.Owned && !(playerLevel is { } lvl && Item.Level > lvl));
+
+    /// <summary>"Requires level 20", "Owned", …: why the card has no Buy button, or "" when it has one.</summary>
+    public string NotBuyableText => IsBuyable ? "" : StateText.Length > 0 ? StateText : "Can't be bought";
 }

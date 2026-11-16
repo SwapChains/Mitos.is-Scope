@@ -14,92 +14,174 @@
             <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
+        <!-- Item tiles: buttons that open the item card. -->
+        <Style Selector="Button.item">
+            <Setter Property="Width" Value="160" />
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+        </Style>
         <!-- Items the player can't buy (level, achievement or coins missing) are dimmed. -->
-        <Style Selector="Border.item.locked">
+        <Style Selector="Button.item.locked">
             <Setter Property="Opacity" Value="0.5" />
         </Style>
-        <Style Selector="Border.item.owned">
+        <Style Selector="Button.item.owned Border.itemFrame">
             <Setter Property="BorderBrush" Value="#8040C060" />
+        </Style>
+        <!-- Item card: − / + around the packs slider, and the green Buy button. -->
+        <Style Selector="Button.qty">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Button.buy">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Background" Value="#5040C060" />
+        </Style>
+        <Style Selector="Button.buy:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#8040C060" />
+        </Style>
+        <Style Selector="Button.buy:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#A040C060" />
         </Style>
     </UserControl.Styles>
 
-    <DockPanel>
-        <!-- Header: back (items page), title, coins, close -->
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" Margin="0,0,0,10">
-            <Button Classes="flat" Content="‹ Categories" Padding="8,3" FontSize="12"
-                    IsVisible="{Binding IsItemsPage}" Command="{Binding BackCommand}" />
-            <TextBlock Grid.Column="1" Classes="title" FontSize="18" VerticalAlignment="Center"
-                       Text="{Binding TitleText}" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="2" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFD060" VerticalAlignment="Center"
-                       Text="{Binding CoinsText}" IsVisible="{Binding HasCoins}" />
-            <Button Grid.Column="3" Classes="flat danger" Width="24" Height="24" Padding="0"
-                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                    ToolTip.Tip="Close the shop" Command="{Binding CloseCommand}">
-                <TextBlock Text="✕" FontSize="12" />
-            </Button>
-        </Grid>
+    <Panel>
+        <DockPanel>
+            <!-- Header: back (items page), title, coins, close -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" Margin="0,0,0,10">
+                <Button Classes="flat" Content="‹ Categories" Padding="8,3" FontSize="12"
+                        IsVisible="{Binding IsItemsPage}" Command="{Binding BackCommand}" />
+                <TextBlock Grid.Column="1" Classes="title" FontSize="18" VerticalAlignment="Center"
+                           Text="{Binding TitleText}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFD060" VerticalAlignment="Center"
+                           Text="{Binding CoinsText}" IsVisible="{Binding HasCoins}" />
+                <Button Grid.Column="3" Classes="flat danger" Width="24" Height="24" Padding="0"
+                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        ToolTip.Tip="Close the shop" Command="{Binding CloseCommand}">
+                    <TextBlock Text="✕" FontSize="12" />
+                </Button>
+            </Grid>
 
-        <!-- Loading / error -->
-        <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8" IsVisible="{Binding IsLoading}">
-            <TextBlock Classes="muted" Text="Loading…" />
-            <ProgressBar IsIndeterminate="True" />
-        </StackPanel>
-        <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8" IsVisible="{Binding HasError}">
-            <TextBlock Classes="error" Text="{Binding ErrorText}" />
-            <Button Classes="flat" Content="Try again" Padding="10,3" FontSize="12"
-                    IsVisible="{Binding CanBrowse}" Command="{Binding RetryCommand}" />
-        </StackPanel>
+            <!-- Loading / error -->
+            <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8" IsVisible="{Binding IsLoading}">
+                <TextBlock Classes="muted" Text="Loading…" />
+                <ProgressBar IsIndeterminate="True" />
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8" IsVisible="{Binding HasError}">
+                <TextBlock Classes="error" Text="{Binding ErrorText}" />
+                <Button Classes="flat" Content="Try again" Padding="10,3" FontSize="12"
+                        IsVisible="{Binding CanBrowse}" Command="{Binding RetryCommand}" />
+            </StackPanel>
 
-        <Panel>
-            <!-- Page 1: categories -->
-            <ScrollViewer IsVisible="{Binding IsCategoriesPage}" VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding Categories}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="api:ShopCategory">
-                            <Button Classes="flat category"
-                                    Command="{Binding $parent[UserControl].((vm:ShopViewModel)DataContext).OpenCategoryCommand}"
-                                    CommandParameter="{Binding}">
-                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                            </Button>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+            <Panel>
+                <!-- Page 1: categories -->
+                <ScrollViewer IsVisible="{Binding IsCategoriesPage}" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Categories}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="api:ShopCategory">
+                                <Button Classes="flat category"
+                                        Command="{Binding $parent[UserControl].((vm:ShopViewModel)DataContext).OpenCategoryCommand}"
+                                        CommandParameter="{Binding}">
+                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
 
-            <!-- Page 2: items of the selected category -->
-            <ScrollViewer IsVisible="{Binding IsItemsPage}" VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding Items}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ShopItemViewModel">
-                            <Border Classes="item" Classes.locked="{Binding IsLocked}" Classes.owned="{Binding IsOwned}"
-                                    Width="160" Margin="0,0,8,8" Padding="8" CornerRadius="6"
-                                    Background="#20FFFFFF" BorderBrush="#30FFFFFF" BorderThickness="1"
-                                    ToolTip.Tip="{Binding Description}">
-                                <StackPanel Spacing="3">
-                                    <Border Width="56" Height="56" CornerRadius="4" Background="#20FFFFFF" HorizontalAlignment="Center">
-                                        <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="3" />
+                <!-- Page 2: items of the selected category; a click opens the item card -->
+                <ScrollViewer IsVisible="{Binding IsItemsPage}" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Items}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ShopItemViewModel">
+                                <Button Classes="flat item" Classes.locked="{Binding IsLocked}" Classes.owned="{Binding IsOwned}"
+                                        Command="{Binding $parent[UserControl].((vm:ShopViewModel)DataContext).SelectItemCommand}"
+                                        CommandParameter="{Binding}">
+                                    <Border Classes="itemFrame" Padding="8" CornerRadius="6"
+                                            BorderBrush="#30FFFFFF" BorderThickness="1">
+                                        <StackPanel Spacing="3">
+                                            <Border Width="56" Height="56" CornerRadius="4" Background="#20FFFFFF" HorizontalAlignment="Center">
+                                                <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="3" />
+                                            </Border>
+                                            <TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Name}"
+                                                       TextAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock FontSize="12" Foreground="#FFFFD060" Text="{Binding PriceText}" TextAlignment="Center" />
+                                            <TextBlock FontSize="11" Foreground="#A0FFFFFF" Text="{Binding StateText}"
+                                                       TextAlignment="Center" IsVisible="{Binding HasStateText}" />
+                                        </StackPanel>
                                     </Border>
-                                    <TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Name}"
-                                               TextAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock FontSize="12" Foreground="#FFFFD060" Text="{Binding PriceText}" TextAlignment="Center" />
-                                    <TextBlock FontSize="11" Foreground="#A0FFFFFF" Text="{Binding StateText}"
-                                               TextAlignment="Center" IsVisible="{Binding HasStateText}" />
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
-        </Panel>
-    </DockPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Panel>
+        </DockPanel>
+
+        <!-- Card of the clicked item, centered over the list. A click outside it closes it. -->
+        <Border Background="#B0000000" CornerRadius="6" Margin="-14,-10"
+                IsVisible="{Binding HasSelectedItem}" PointerPressed="OnBackdropPressed">
+            <Border Width="300" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Padding="16,14" CornerRadius="8" Background="#FF181E24" BorderBrush="#40FFFFFF" BorderThickness="1">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding SelectedItem.Name}"
+                                   TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="flat" Width="24" Height="24" Padding="0" VerticalAlignment="Top"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                ToolTip.Tip="Close" Command="{Binding CloseItemCommand}">
+                            <TextBlock Text="✕" FontSize="12" />
+                        </Button>
+                    </Grid>
+
+                    <Border Width="112" Height="112" CornerRadius="6" Background="#20FFFFFF" HorizontalAlignment="Center">
+                        <Image Source="{Binding SelectedItem.Sprite}" Stretch="Uniform" Margin="6" />
+                    </Border>
+
+                    <TextBlock FontSize="13" Foreground="#FFFFD060" Text="{Binding SelectedItem.PriceText}" TextAlignment="Center" />
+                    <TextBlock FontSize="12" Foreground="#A0FFFFFF" Text="{Binding SelectedItem.NotBuyableText}" TextAlignment="Center"
+                               IsVisible="{Binding !SelectedItem.IsBuyable}" />
+
+                    <!-- Consumables: how many packs (1-30); the price on the button follows. -->
+                    <StackPanel Spacing="4" IsVisible="{Binding ShowQuantity}">
+                        <TextBlock FontSize="13" TextAlignment="Center" Text="{Binding PacksText}" />
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                            <Button Classes="flat qty" Content="−" CommandParameter="-1"
+                                    Command="{Binding ChangeQuantityCommand}" IsEnabled="{Binding !IsBuying}" />
+                            <Slider Grid.Column="1" Minimum="1" Maximum="30" TickFrequency="1" IsSnapToTickEnabled="True"
+                                    VerticalAlignment="Center" IsEnabled="{Binding !IsBuying}"
+                                    Value="{Binding QuantityValue}" />
+                            <Button Grid.Column="2" Classes="flat qty" Content="+" CommandParameter="1"
+                                    Command="{Binding ChangeQuantityCommand}" IsEnabled="{Binding !IsBuying}" />
+                        </Grid>
+                    </StackPanel>
+
+                    <Button Classes="flat buy" Margin="0,4,0,0"
+                            IsVisible="{Binding ShowBuy}" IsEnabled="{Binding CanPressBuy}"
+                            Content="{Binding BuyText}" Command="{Binding BuyCommand}" />
+                </StackPanel>
+            </Border>
+        </Border>
+    </Panel>
 </UserControl>
