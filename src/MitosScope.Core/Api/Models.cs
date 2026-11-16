@@ -74,6 +74,7 @@ public sealed record AccountInfo
     public Guild? Guild { get; init; }
 }
 
+/// <summary>/v1/inventory: one owned item. Read on demand by the inventory window (cached ~60 s by the server).</summary>
 public sealed record InventoryItem
 {
     public long Id { get; init; }
@@ -111,19 +112,6 @@ public sealed record EquipmentSlot
     public long MaxDurability { get; init; }
     /// <summary>Coins to repair it; 0 when it isn't damaged or can't be repaired.</summary>
     public long RepairPrice { get; init; }
-
-    /// <summary>Fallback for clients without /v1/equipment: an equipped item from /v1/inventory (no repair price).</summary>
-    public static EquipmentSlot FromInventory(InventoryItem i) => new()
-    {
-        Slot = i.Slot,
-        Id = i.Id,
-        Name = i.Name,
-        Type = i.Type,
-        Category = i.Category,
-        Sprite = i.Sprite,
-        Durability = i.Durability,
-        MaxDurability = i.MaxDurability,
-    };
 }
 
 // ---- shop (API v3, needs the "shop" permission) ----

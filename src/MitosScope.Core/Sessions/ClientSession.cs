@@ -25,7 +25,6 @@ public enum SessionChange
     Status = 1 << 0,
     Game = 1 << 1,
     Account = 1 << 2,
-    Inventory = 1 << 3,
     Profile = 1 << 5,
     Quests = 1 << 7,
     /// <summary>MatchTracker: a match just ended (new last match).</summary>
@@ -35,7 +34,7 @@ public enum SessionChange
     Equipment = 1 << 11,
     /// <summary><see cref="ClientSession.WindowHandle"/> became known.</summary>
     Window = 1 << 12,
-    All = Status | Game | Account | Inventory | Profile | Quests | LastMatch | BattlePass | Wallet | Equipment | Window,
+    All = Status | Game | Account | Profile | Quests | LastMatch | BattlePass | Wallet | Equipment | Window,
 }
 
 /// <summary>
@@ -95,13 +94,12 @@ public sealed class ClientSession
 
     public GameState? Game { get; private set; }
     public AccountInfo? Account { get; private set; }
-    public IReadOnlyList<InventoryItem>? Inventory { get; private set; }
     public ProfileStats? Profile { get; private set; }
     public IReadOnlyList<Quest>? Quests { get; private set; }
     public BattlePassInfo? BattlePass { get; private set; }
     /// <summary>Null until the first /v1/wallet answer, or if the client doesn't have it (API before v3).</summary>
     public Wallet? Wallet { get; private set; }
-    /// <summary>Null until the first /v1/equipment answer, or if the client doesn't have it (then use <see cref="Inventory"/>).</summary>
+    /// <summary>Null until the first /v1/equipment answer, or if the client doesn't have it (API before v3).</summary>
     public IReadOnlyList<EquipmentSlot>? Equipment { get; private set; }
 
     // Set when the client answers 404 (API before v3). A client's API version doesn't change while
@@ -286,9 +284,6 @@ public sealed class ClientSession
             await FetchSectionAsync<AccountInfo>("account", v => Account = v, SessionChange.Account, stop, token, ct);
             await FetchSectionAsync<List<Quest>>("quests", v => Quests = v, SessionChange.Quests, stop, token, ct);
             await FetchSectionAsync<ProfileStats>("profile", v => Profile = v, SessionChange.Profile, stop, token, ct);
-            // The equipped items come from /v1/equipment; the inventory is only the fallback for older clients.
-            if (_noEquipment)
-                await FetchSectionAsync<List<InventoryItem>>("inventory", v => Inventory = v, SessionChange.Inventory, stop, token, ct);
             await FetchSectionAsync<BattlePassInfo>("battlepass", v => BattlePass = v, SessionChange.BattlePass, stop, token, ct);
 
             await Task.Delay(SectionInterval, ct).ConfigureAwait(false);
@@ -305,11 +300,7 @@ public sealed class ClientSession
 
             if (!_noEquipment
                 && await FetchSectionAsync<List<EquipmentSlot>>("equipment", v => Equipment = v, SessionChange.Equipment, stop, token, ct) == 404)
-            {
                 _noEquipment = true;
-                // Older client: fetch the inventory right away instead of waiting for the next 60 s round.
-                await FetchSectionAsync<List<InventoryItem>>("inventory", v => Inventory = v, SessionChange.Inventory, stop, token, ct);
-            }
 
             if (_noWallet && _noEquipment)
                 return;
@@ -377,14 +368,22 @@ public sealed class ClientSession
         return false;
     }
 
-    // ---- shop (on demand, needs the "shop" permission) -------------------------------------
+    // ---- on demand: inventory, and the shop (needs the "shop" permission) --------------------
     // Not routed through Handle(): a shop 403 (scope missing/revoked) must not end the session.
 
+    /// <summary>
+    /// Every item the account owns (/v1/inventory), for the inventory window. Not polled. The server
+    /// caches it ~60 s, so right after a change its <c>equipped</c> flags can be stale: prefer
+    /// <see cref="Equipment"/> (never cached) for what is equipped.
+    /// </summary>
+    public Task<ApiResult<SectionResponse<List<InventoryItem>>>> GetInventoryAsync(CancellationToken ct) =>
+        OnDemandCallAsync((token, c) => _api.SectionAsync<List<InventoryItem>>(Port, "inventory", token, c), ct);
+
     public Task<ApiResult<ShopCategories>> GetShopCategoriesAsync(CancellationToken ct) =>
-        ShopCallAsync((token, c) => _api.ShopAsync(Port, token, c), ct);
+        OnDemandCallAsync((token, c) => _api.ShopAsync(Port, token, c), ct);
 
     public Task<ApiResult<ShopItems>> GetShopItemsAsync(int category, CancellationToken ct) =>
-        ShopCallAsync((token, c) => _api.ShopItemsAsync(Port, category, token, c), ct);
+        OnDemandCallAsync((token, c) => _api.ShopItemsAsync(Port, category, token, c), ct);
 
     /// <summary>
     /// Buys a shop item (<paramref name="qty"/> purchases of a consumable). Spends coins. On success the
@@ -392,7 +391,7 @@ public sealed class ClientSession
     /// </summary>
     public async Task<ApiResult<BuyResult>> BuyAsync(long itemId, int qty, CancellationToken ct)
     {
-        var r = await ShopCallAsync((token, c) => _api.BuyAsync(Port, itemId, qty, token, c), ct).ConfigureAwait(false);
+        var r = await OnDemandCallAsync((token, c) => _api.BuyAsync(Port, itemId, qty, token, c), ct).ConfigureAwait(false);
         if (r.StatusCode is >= 200 and < 300)
         {
             if (r.Value is { } v && Wallet is { } w)
@@ -412,7 +411,7 @@ public sealed class ClientSession
     /// </summary>
     public async Task<ApiResult<EquipResult>> EquipAsync(long itemId, int? slot, bool unequip, CancellationToken ct)
     {
-        var r = await ShopCallAsync((token, c) => _api.EquipAsync(Port, itemId, slot, unequip, token, c), ct).ConfigureAwait(false);
+        var r = await OnDemandCallAsync((token, c) => _api.EquipAsync(Port, itemId, slot, unequip, token, c), ct).ConfigureAwait(false);
         if (r.StatusCode is >= 200 and < 300)
         {
             if (r.Value?.Equip is { } equip)
@@ -431,7 +430,7 @@ public sealed class ClientSession
     /// </summary>
     public async Task<ApiResult<RepairResult>> RepairAsync(long? itemId, CancellationToken ct)
     {
-        var r = await ShopCallAsync((token, c) => _api.RepairAsync(Port, itemId, token, c), ct).ConfigureAwait(false);
+        var r = await OnDemandCallAsync((token, c) => _api.RepairAsync(Port, itemId, token, c), ct).ConfigureAwait(false);
         if (r.StatusCode is >= 200 and < 300)
         {
             if (r.Value is { } v && Wallet is { } w)
@@ -444,7 +443,7 @@ public sealed class ClientSession
         return r;
     }
 
-    private async Task<ApiResult<T>> ShopCallAsync<T>(Func<string, CancellationToken, Task<ApiResult<T>>> call, CancellationToken ct)
+    private async Task<ApiResult<T>> OnDemandCallAsync<T>(Func<string, CancellationToken, Task<ApiResult<T>>> call, CancellationToken ct)
     {
         if (Status != SessionStatus.Connected || _token is not { } token)
             return new ApiResult<T>(0, default, "not_connected");

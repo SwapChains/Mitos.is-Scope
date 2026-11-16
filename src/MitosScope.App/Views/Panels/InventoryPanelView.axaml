@@ -1,0 +1,11 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:panels="using:MitosScope.App.ViewModels.Panels"
+             x:Class="MitosScope.App.Views.Panels.InventoryPanelView"
+             x:DataType="panels:InventoryPanelViewModel">
+    <!-- The whole card is clickable outside edit mode (PanelWindow calls OnClicked): opens/closes the inventory window. -->
+    <StackPanel Spacing="2" VerticalAlignment="Center">
+        <TextBlock Classes="title" Text="Inventory" />
+        <TextBlock Classes="muted" Text="{Binding Inventory.CardText}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+    </StackPanel>
+</UserControl>

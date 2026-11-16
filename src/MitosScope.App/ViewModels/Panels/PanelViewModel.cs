@@ -48,6 +48,18 @@ public sealed class ShopPanelViewModel(TrackerViewModel tracker, ShopViewModel s
     public override void OnClicked() => Shop.Toggle();
 }
 
+/// <summary>Small clickable card that opens the inventory window (see InventoryViewModel).</summary>
+public sealed class InventoryPanelViewModel(TrackerViewModel tracker, InventoryViewModel inventory) : PanelViewModel(tracker)
+{
+    public InventoryViewModel Inventory { get; } = inventory;
+    public override string Id => "inventory";
+    public override string Title => "Inventory";
+    // Menu only by default, like the Shop card (just below it).
+    public override PanelLayout DefaultLayout => new() { X = 600, Y = 360, Width = 200, Height = 70, ShowInMatch = false };
+    public override bool IsInteractive => true;
+    public override void OnClicked() => Inventory.Toggle();
+}
+
 public sealed class StatusPanelViewModel(TrackerViewModel tracker) : PanelViewModel(tracker)
 {
     public override string Id => "status";

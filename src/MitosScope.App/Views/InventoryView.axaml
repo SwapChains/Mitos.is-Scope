@@ -1,0 +1,152 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MitosScope.App.ViewModels"
+             x:Class="MitosScope.App.Views.InventoryView"
+             x:DataType="vm:InventoryViewModel">
+    <UserControl.Styles>
+        <!-- Item tiles: buttons that open the item card. -->
+        <Style Selector="Button.item">
+            <Setter Property="Width" Value="120" />
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Button.item.equipped Border.itemFrame">
+            <Setter Property="BorderBrush" Value="#A040C060" />
+        </Style>
+        <Style Selector="Button.action">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Background" Value="#5040C060" />
+        </Style>
+        <Style Selector="Button.action:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#8040C060" />
+        </Style>
+        <Style Selector="Button.action:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#A040C060" />
+        </Style>
+    </UserControl.Styles>
+
+    <Panel>
+        <DockPanel>
+            <!-- Header: title, refresh, close -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" Margin="0,0,0,10">
+                <TextBlock Classes="title" FontSize="18" VerticalAlignment="Center" Text="Inventory" />
+                <Button Grid.Column="1" Classes="flat" Content="Refresh" Padding="8,3" FontSize="12"
+                        ToolTip.Tip="Reload the items (the game updates this list about once a minute)"
+                        IsEnabled="{Binding !IsLoading}" Command="{Binding RetryCommand}" />
+                <Button Grid.Column="2" Classes="flat danger" Width="24" Height="24" Padding="0"
+                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        ToolTip.Tip="Close the inventory" Command="{Binding CloseCommand}">
+                    <TextBlock Text="✕" FontSize="12" />
+                </Button>
+            </Grid>
+
+            <!-- Loading / error / empty -->
+            <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8" IsVisible="{Binding IsLoading}">
+                <TextBlock Classes="muted" Text="Loading…" />
+                <ProgressBar IsIndeterminate="True" />
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8" IsVisible="{Binding HasError}">
+                <TextBlock Classes="error" Text="{Binding ErrorText}" />
+                <Button Classes="flat" Content="Try again" Padding="10,3" FontSize="12"
+                        IsVisible="{Binding CanBrowse}" Command="{Binding RetryCommand}" />
+            </StackPanel>
+            <TextBlock DockPanel.Dock="Top" Classes="muted" Text="No items." IsVisible="{Binding IsEmpty}" />
+
+            <!-- Items grouped by category; a click opens the item card -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Groups}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:InventoryGroupViewModel">
+                            <StackPanel Margin="0,0,0,6">
+                                <!-- Category row: name and count, show/hide arrow on the right (saved). -->
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,0,22,6">
+                                    <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#C0FFFFFF"
+                                               Text="{Binding Header}" VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" Classes="flat" Width="26" Height="22" Padding="0"
+                                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                            ToolTip.Tip="{Binding ToggleTip}"
+                                            Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).ToggleGroupCommand}"
+                                            CommandParameter="{Binding}">
+                                        <TextBlock Text="{Binding ArrowText}" FontSize="10" />
+                                    </Button>
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Items}" IsVisible="{Binding IsExpanded}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:InventoryItemViewModel">
+                                            <Button Classes="flat item" Classes.equipped="{Binding IsEquipped}"
+                                                    Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).SelectItemCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Border Classes="itemFrame" Padding="6" CornerRadius="6"
+                                                        BorderBrush="#30FFFFFF" BorderThickness="1">
+                                                    <StackPanel Spacing="2">
+                                                        <Border Width="48" Height="48" CornerRadius="4" Background="#20FFFFFF" HorizontalAlignment="Center">
+                                                            <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="3" />
+                                                        </Border>
+                                                        <TextBlock FontSize="11" FontWeight="SemiBold" Text="{Binding Name}"
+                                                                   TextAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock FontSize="10" Foreground="#A0FFFFFF" Text="{Binding DetailText}"
+                                                                   TextAlignment="Center" IsVisible="{Binding HasDetailText}" />
+                                                        <TextBlock FontSize="10" Foreground="#FF60D080" Text="Equipped"
+                                                                   TextAlignment="Center" IsVisible="{Binding IsEquipped}" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </DockPanel>
+
+        <!-- Card of the clicked item, centered over the list. A click outside it closes it. -->
+        <Border Background="#B0000000" CornerRadius="6" Margin="-14,-10"
+                IsVisible="{Binding HasSelectedItem}" PointerPressed="OnBackdropPressed">
+            <Border Width="300" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Padding="16,14" CornerRadius="8" Background="#FF181E24" BorderBrush="#40FFFFFF" BorderThickness="1">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding SelectedItem.Name}"
+                                   TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="flat" Width="24" Height="24" Padding="0" VerticalAlignment="Top"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                ToolTip.Tip="Close" Command="{Binding CloseItemCommand}">
+                            <TextBlock Text="✕" FontSize="12" />
+                        </Button>
+                    </Grid>
+
+                    <Border Width="112" Height="112" CornerRadius="6" Background="#20FFFFFF" HorizontalAlignment="Center">
+                        <Image Source="{Binding SelectedItem.Sprite}" Stretch="Uniform" Margin="6" />
+                    </Border>
+
+                    <TextBlock FontSize="13" TextAlignment="Center" Text="{Binding SelectedItem.CardDetailText}"
+                               IsVisible="{Binding SelectedItem.HasCardDetailText, FallbackValue=False}" />
+                    <TextBlock FontSize="12" Foreground="#A0FFFFFF" TextAlignment="Center" Text="Passive power"
+                               IsVisible="{Binding SelectedItem.IsPassive, FallbackValue=False}" />
+                    <TextBlock FontSize="12" Foreground="#FF60D080" TextAlignment="Center" Text="{Binding SelectedItem.EquippedText}"
+                               IsVisible="{Binding SelectedItem.IsEquipped, FallbackValue=False}" />
+
+                    <Button Classes="flat action" Margin="0,4,0,0"
+                            IsEnabled="{Binding CanPressAction}"
+                            Content="{Binding ActionText}" Command="{Binding ToggleEquipCommand}" />
+                    <TextBlock FontSize="11" Foreground="#A0FFFFFF" TextAlignment="Center" TextWrapping="Wrap"
+                               Text="{Binding ActionHint}" IsVisible="{Binding HasActionHint}" />
+                </StackPanel>
+            </Border>
+        </Border>
+    </Panel>
+</UserControl>

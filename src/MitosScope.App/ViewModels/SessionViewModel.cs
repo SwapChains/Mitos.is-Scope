@@ -27,7 +27,6 @@ public partial class SessionViewModel : ViewModelBase
     [ObservableProperty] public partial SessionStatus Status { get; private set; }
     [ObservableProperty] public partial GameState? Game { get; private set; }
     [ObservableProperty] public partial AccountInfo? Account { get; private set; }
-    [ObservableProperty] public partial IReadOnlyList<InventoryItem>? Inventory { get; private set; }
     [ObservableProperty] public partial ProfileStats? Profile { get; private set; }
     [ObservableProperty] public partial IReadOnlyList<Quest>? Quests { get; private set; }
     [ObservableProperty] public partial IReadOnlyList<EquippedItemViewModel>? EquippedItems { get; private set; }
@@ -253,19 +252,25 @@ public partial class SessionViewModel : ViewModelBase
         if (r.StatusCode is >= 200 and < 300)
             return; // the item leaves the list (RebuildEquippedItems)
 
-        item.ActionStatus = EquipErrorText(r.StatusCode, r.Error);
+        item.ActionStatus = EquipErrorText(r.StatusCode, r.Error, unequip: true);
         await Task.Delay(RepairStatusTime);
         item.ActionStatus = null;
     }
 
-    private static string EquipErrorText(int status, string? error) => (status, error) switch
+    /// <summary>Short text for a failed POST /v1/equip (Equipment panel and inventory window).</summary>
+    internal static string EquipErrorText(int status, string? error, bool unequip) => (status, error) switch
     {
         (0, "not_connected") => "Not connected",
         (0, _) => "Game not responding",
         (403, "scope_required" or "addon_scope_revoked") => "No shop permission",
         (409, _) => "Not while alive in a match",
+        (_, "invalid_level") => "Your level is too low",
+        (_, "only_passive_pows_here") => "Only passive powers go in that slot",
+        (_, "cannot_equip_more_collector") => "Can't equip more collectors",
+        (_, "addon_already_equipped") => "Already equipped",
+        (_, "addon_not_equipped") => "Not equipped",
         (504, _) => "Server timeout, try again",
-        _ => $"Couldn't unequip ({error ?? status.ToString()})",
+        _ => $"Couldn't {(unequip ? "unequip" : "equip")} ({error ?? status.ToString()})",
     };
 
     private void NotifyEquipAccess()
@@ -274,12 +279,10 @@ public partial class SessionViewModel : ViewModelBase
         OnPropertyChanged(nameof(UnequipTip));
     }
 
-    /// <summary>Equipped items from /v1/equipment, or from the inventory on clients without it.</summary>
+    /// <summary>Equipped items from /v1/equipment (API v3; nothing on older clients).</summary>
     private void RebuildEquippedItems()
     {
-        var slots = Session.Equipment
-                    ?? Session.Inventory?.Where(i => i.Equipped).Select(EquipmentSlot.FromInventory).ToList();
-        EquippedItems = slots?
+        EquippedItems = Session.Equipment?
             .OrderBy(i => i.Slot)
             .Select(i => new EquippedItemViewModel(i, this))
             .ToList();
@@ -379,10 +382,7 @@ public partial class SessionViewModel : ViewModelBase
             Quests = Session.Quests;
             OnPropertyChanged(nameof(OpenQuestCount));
         }
-        if (change.HasFlag(SessionChange.Inventory))
-            Inventory = Session.Inventory;
-        // Inventory too: it's the fallback source, and RefreshItemIcons uses it to rebuild the rows.
-        if (change.HasFlag(SessionChange.Equipment) || change.HasFlag(SessionChange.Inventory))
+        if (change.HasFlag(SessionChange.Equipment))
             RebuildEquippedItems();
         if (change.HasFlag(SessionChange.BattlePass))
         {

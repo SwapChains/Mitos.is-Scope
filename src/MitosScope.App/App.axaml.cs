@@ -48,10 +48,10 @@ public partial class App : Application
             var tracker = new TrackerViewModel();
             StartSessions(tracker);
 
-            var popups = CreatePopups(tracker);
+            var popups = CreatePopups(tracker, _settings);
             _overlay = new OverlayManager(_settings, CreatePanels(tracker, popups));
             _overlay.ShowAll();
-            _overlay.AttachPopups([popups.Shop]);
+            _overlay.AttachPopups([popups.Shop, popups.Inventory]);
 
             _focus = new FocusController(_sessions, tracker, _overlay);
             _focus.Start();
@@ -78,10 +78,11 @@ public partial class App : Application
     /// The popups (big cards in the middle of the screen, see PopupViewModel). Register new ones here,
     /// add them to the AttachPopups call above, and pass them to the panel that opens them.
     /// </summary>
-    private sealed record Popups(ShopViewModel Shop);
+    private sealed record Popups(ShopViewModel Shop, InventoryViewModel Inventory);
 
-    private static Popups CreatePopups(TrackerViewModel tracker) => new(
-        Shop: new ShopViewModel(tracker));
+    private static Popups CreatePopups(TrackerViewModel tracker, AppSettings settings) => new(
+        Shop: new ShopViewModel(tracker),
+        Inventory: new InventoryViewModel(tracker, settings));
 
     /// <summary>Register new panels here.</summary>
     private static PanelViewModel[] CreatePanels(TrackerViewModel tracker, Popups popups) =>
@@ -94,6 +95,7 @@ public partial class App : Application
         new ProfilePanelViewModel(tracker),
         new BattlePassPanelViewModel(tracker),
         new ShopPanelViewModel(tracker, popups.Shop),
+        new InventoryPanelViewModel(tracker, popups.Inventory),
     ];
 
     private void StartSessions(TrackerViewModel tracker)
