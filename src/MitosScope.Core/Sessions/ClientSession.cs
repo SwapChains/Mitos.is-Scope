@@ -406,6 +406,26 @@ public sealed class ClientSession
     }
 
     /// <summary>
+    /// Equips an owned item (<paramref name="slot"/> null = the server picks the slot), or unequips it.
+    /// Not while alive in a match (409 "alive"). On success the equipped slots from the answer are
+    /// applied right away, and wallet/equipment are re-fetched.
+    /// </summary>
+    public async Task<ApiResult<EquipResult>> EquipAsync(long itemId, int? slot, bool unequip, CancellationToken ct)
+    {
+        var r = await ShopCallAsync((token, c) => _api.EquipAsync(Port, itemId, slot, unequip, token, c), ct).ConfigureAwait(false);
+        if (r.StatusCode is >= 200 and < 300)
+        {
+            if (r.Value?.Equip is { } equip)
+            {
+                Equipment = equip;
+                Raise(SessionChange.Equipment);
+            }
+            RequestLiveRefresh();
+        }
+        return r;
+    }
+
+    /// <summary>
     /// Repairs one equipped item, or all the broken equipment when <paramref name="itemId"/> is null.
     /// Spends coins. On success the coins are updated right away and wallet/equipment are re-fetched.
     /// </summary>

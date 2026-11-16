@@ -58,6 +58,16 @@ public sealed class MitosApiClient : IDisposable
     public Task<ApiResult<BuyResult>> BuyAsync(int port, long itemId, int qty, string token, CancellationToken ct) =>
         SendAsync<BuyResult>(port, HttpMethod.Post, "/v1/shop/buy", new { item = itemId, qty }, token, DefaultTimeout, ct);
 
+    /// <summary>
+    /// Equips an owned item (in <paramref name="slot"/>, or the server picks it when null), or unequips it.
+    /// Answers 409 "alive" while the player's cell is alive in a match.
+    /// </summary>
+    public Task<ApiResult<EquipResult>> EquipAsync(int port, long itemId, int? slot, bool unequip, string token, CancellationToken ct) =>
+        SendAsync<EquipResult>(port, HttpMethod.Post, "/v1/equip",
+            unequip ? new { item = itemId, unequip = true }
+            : slot is { } s ? new { item = itemId, slot = s }
+            : (object)new { item = itemId }, token, DefaultTimeout, ct);
+
     /// <summary>Repairs one equipped item, or all the broken equipment when <paramref name="itemId"/> is null. Spends coins.</summary>
     public Task<ApiResult<RepairResult>> RepairAsync(int port, long? itemId, string token, CancellationToken ct) =>
         SendAsync<RepairResult>(port, HttpMethod.Post, "/v1/repair",

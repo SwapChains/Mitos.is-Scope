@@ -160,6 +160,9 @@ public sealed record ShopItems(int Category, long Coins, IReadOnlyList<ShopItem>
 /// <summary>POST /v1/shop/buy: the uses the player now has (<c>durability</c>), the coins left and the coins actually taken.</summary>
 public sealed record BuyResult(long Id, string? Name, long Durability, long Coins, long Spent);
 
+/// <summary>POST /v1/equip: the item's new state and, in <c>equip</c>, all the equipped slots (like /v1/equipment).</summary>
+public sealed record EquipResult(long Id, string? Name, bool Equipped, int Slot, IReadOnlyList<EquipmentSlot>? Equip);
+
 /// <summary>POST /v1/repair: the coins left and the coins actually taken.</summary>
 public sealed record RepairResult(long Coins, long Spent);
 

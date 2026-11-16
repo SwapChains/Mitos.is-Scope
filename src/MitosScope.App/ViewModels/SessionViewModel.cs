@@ -230,6 +230,50 @@ public partial class SessionViewModel : ViewModelBase
         _ => $"Repair failed ({error ?? status.ToString()})",
     };
 
+    // ---- equip / unequip (API v3, needs the shop permission) ----
+
+    /// <summary>Equipment can change only with the shop permission and while not alive in a match (else 409 "alive").</summary>
+    public bool CanChangeEquipment => HasShopScope && Game?.Alive != true;
+
+    /// <summary>Tooltip of the item icons in the Equipment panel.</summary>
+    public string UnequipTip => !HasShopScope ? "Needs the shop permission to change equipment"
+        : Game?.Alive == true ? "Equipment can't be changed while alive in a match"
+        : "Click to unequip";
+
+    /// <summary>Unequips one item (POST /v1/equip with unequip). The answer's slots replace the list right away.</summary>
+    [RelayCommand]
+    private async Task UnequipAsync(EquippedItemViewModel item)
+    {
+        if (!CanChangeEquipment || item.IsBusy)
+            return;
+        item.IsBusy = true;
+        item.ActionStatus = "Unequipping…";
+        var r = await Session.EquipAsync(item.Item.Id, null, unequip: true, CancellationToken.None);
+        item.IsBusy = false;
+        if (r.StatusCode is >= 200 and < 300)
+            return; // the item leaves the list (RebuildEquippedItems)
+
+        item.ActionStatus = EquipErrorText(r.StatusCode, r.Error);
+        await Task.Delay(RepairStatusTime);
+        item.ActionStatus = null;
+    }
+
+    private static string EquipErrorText(int status, string? error) => (status, error) switch
+    {
+        (0, "not_connected") => "Not connected",
+        (0, _) => "Game not responding",
+        (403, "scope_required" or "addon_scope_revoked") => "No shop permission",
+        (409, _) => "Not while alive in a match",
+        (504, _) => "Server timeout, try again",
+        _ => $"Couldn't unequip ({error ?? status.ToString()})",
+    };
+
+    private void NotifyEquipAccess()
+    {
+        OnPropertyChanged(nameof(CanChangeEquipment));
+        OnPropertyChanged(nameof(UnequipTip));
+    }
+
     /// <summary>Equipped items from /v1/equipment, or from the inventory on clients without it.</summary>
     private void RebuildEquippedItems()
     {
@@ -291,15 +335,19 @@ public partial class SessionViewModel : ViewModelBase
             OnPropertyChanged(nameof(StatusText));
             OnPropertyChanged(nameof(IsConnected));
             OnPropertyChanged(nameof(HasShopScope));
+            NotifyEquipAccess();
         }
         if (change.HasFlag(SessionChange.Game))
         {
             // LastMatch first: on the death tick Game and LastMatch change together.
             if (change.HasFlag(SessionChange.LastMatch))
                 LastMatch = Session.Matches.Last;
+            var previousAlive = Game?.Alive;
             Game = Session.Game;
             OnPropertyChanged(nameof(HasMatchName));
             OnPropertyChanged(nameof(AliveText));
+            if (Game?.Alive != previousAlive)
+                NotifyEquipAccess();
             OnPropertyChanged(nameof(RoomTypeText));
             OnPropertyChanged(nameof(HasModeTitle));
             NotifyMatchRows();

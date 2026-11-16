@@ -29,6 +29,30 @@
                 <Setter Property="IsVisible" Value="True" />
             </Style>
         </ContainerQuery>
+
+        <!-- Item icon = unequip button: a red ✕ over the sprite under the mouse. -->
+        <Style Selector="Button.itemIcon">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="#20FFFFFF" />
+        </Style>
+        <Style Selector="Button.itemIcon:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#20FFFFFF" />
+        </Style>
+        <Style Selector="Button.itemIcon TextBlock.unequipMark">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Button.itemIcon:pointerover:not(:disabled) TextBlock.unequipMark">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="Button.itemIcon:pointerover:not(:disabled) Image">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
     </UserControl.Styles>
 
     <DockPanel>
@@ -62,9 +86,17 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:EquippedItemViewModel">
                         <Grid ColumnDefinitions="36,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" Margin="0,0,0,6">
-                            <Border Width="36" Height="36" CornerRadius="4" Background="#20FFFFFF">
-                                <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="2" />
-                            </Border>
+                            <!-- Click on the icon unequips the item (not while alive in a match). -->
+                            <Button Classes="overlayButton itemIcon" VerticalAlignment="Top"
+                                    IsEnabled="{Binding Owner.CanChangeEquipment}"
+                                    ToolTip.Tip="{Binding Owner.UnequipTip}" ToolTip.ShowOnDisabled="True"
+                                    Command="{Binding Owner.UnequipCommand}" CommandParameter="{Binding}">
+                                <Panel>
+                                    <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="2" />
+                                    <TextBlock Classes="unequipMark" Text="✕" FontSize="18" FontWeight="Bold"
+                                               Foreground="#FFFF5050" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Panel>
+                            </Button>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                                     <TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Name}"
@@ -78,6 +110,8 @@
                                                  IsVisible="{Binding HasDurability}"
                                                  Classes.medium="{Binding IsMedium}" Classes.low="{Binding IsLow}" />
                                 </Panel>
+                                <TextBlock FontSize="11" Foreground="#FFFFB020" Text="{Binding ActionStatus}"
+                                           IsVisible="{Binding HasActionStatus}" TextTrimming="CharacterEllipsis" />
                                 <!-- Repairs this item; shows its cost (API v3 repair_price), only when damaged. -->
                                 <Button Classes="overlayButton" IsVisible="{Binding CanRepair}"
                                         Command="{Binding Owner.RepairCommand}" CommandParameter="{Binding}">
