@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MitosScope.Core.Api;
 using MitosScope.Core.Discovery;
 using MitosScope.Core.Stats;
@@ -25,7 +26,6 @@ public enum SessionChange
     Status = 1 << 0,
     Game = 1 << 1,
     Account = 1 << 2,
-    Inventory = 1 << 3,
     Profile = 1 << 5,
     Quests = 1 << 7,
     /// <summary>MatchTracker: a match just ended (new last match).</summary>
@@ -35,7 +35,8 @@ public enum SessionChange
     Equipment = 1 << 11,
     /// <summary><see cref="ClientSession.WindowHandle"/> became known.</summary>
     Window = 1 << 12,
-    All = Status | Game | Account | Inventory | Profile | Quests | LastMatch | BattlePass | Wallet | Equipment | Window,
+    GemTraining = 1 << 13,
+    All = Status | Game | Account | Profile | Quests | LastMatch | BattlePass | Wallet | Equipment | Window | GemTraining,
 }
 
 /// <summary>
@@ -95,19 +96,21 @@ public sealed class ClientSession
 
     public GameState? Game { get; private set; }
     public AccountInfo? Account { get; private set; }
-    public IReadOnlyList<InventoryItem>? Inventory { get; private set; }
     public ProfileStats? Profile { get; private set; }
     public IReadOnlyList<Quest>? Quests { get; private set; }
     public BattlePassInfo? BattlePass { get; private set; }
     /// <summary>Null until the first /v1/wallet answer, or if the client doesn't have it (API before v3).</summary>
     public Wallet? Wallet { get; private set; }
-    /// <summary>Null until the first /v1/equipment answer, or if the client doesn't have it (then use <see cref="Inventory"/>).</summary>
+    /// <summary>Null until the first /v1/equipment answer, or if the client doesn't have it (API before v3).</summary>
     public IReadOnlyList<EquipmentSlot>? Equipment { get; private set; }
+    /// <summary>Null until the first /v1/gemtraining answer, or if the client doesn't have it (API before v4).</summary>
+    public GemTraining? GemTraining { get; private set; }
 
     // Set when the client answers 404 (API before v3). A client's API version doesn't change while
     // it runs, so these are never reset.
     private bool _noWallet;
     private bool _noEquipment;
+    private bool _noGemTraining;
 
     /// <summary>Live peak mass and last-match stats, fed by the game poll.</summary>
     public MatchTracker Matches { get; } = new();
@@ -286,9 +289,6 @@ public sealed class ClientSession
             await FetchSectionAsync<AccountInfo>("account", v => Account = v, SessionChange.Account, stop, token, ct);
             await FetchSectionAsync<List<Quest>>("quests", v => Quests = v, SessionChange.Quests, stop, token, ct);
             await FetchSectionAsync<ProfileStats>("profile", v => Profile = v, SessionChange.Profile, stop, token, ct);
-            // The equipped items come from /v1/equipment; the inventory is only the fallback for older clients.
-            if (_noEquipment)
-                await FetchSectionAsync<List<InventoryItem>>("inventory", v => Inventory = v, SessionChange.Inventory, stop, token, ct);
             await FetchSectionAsync<BattlePassInfo>("battlepass", v => BattlePass = v, SessionChange.BattlePass, stop, token, ct);
 
             await Task.Delay(SectionInterval, ct).ConfigureAwait(false);
@@ -305,13 +305,13 @@ public sealed class ClientSession
 
             if (!_noEquipment
                 && await FetchSectionAsync<List<EquipmentSlot>>("equipment", v => Equipment = v, SessionChange.Equipment, stop, token, ct) == 404)
-            {
                 _noEquipment = true;
-                // Older client: fetch the inventory right away instead of waiting for the next 60 s round.
-                await FetchSectionAsync<List<InventoryItem>>("inventory", v => Inventory = v, SessionChange.Inventory, stop, token, ct);
-            }
 
-            if (_noWallet && _noEquipment)
+            if (!_noGemTraining
+                && await FetchSectionAsync<GemTraining>("gemtraining", v => GemTraining = v, SessionChange.GemTraining, stop, token, ct) == 404)
+                _noGemTraining = true;
+
+            if (_noWallet && _noEquipment && _noGemTraining)
                 return;
             // Every 15 s, or right away when the player dies (RequestLiveRefresh).
             await _liveRefresh.WaitAsync(LiveSectionInterval, ct).ConfigureAwait(false);
@@ -377,14 +377,112 @@ public sealed class ClientSession
         return false;
     }
 
-    // ---- shop (on demand, needs the "shop" permission) -------------------------------------
+    // ---- on demand: inventory, and the shop (needs the "shop" permission) --------------------
     // Not routed through Handle(): a shop 403 (scope missing/revoked) must not end the session.
 
+    /// <summary>
+    /// Every item the account owns (/v1/inventory), for the inventory window. Not polled. The server
+    /// caches it ~60 s, so right after a change its <c>equipped</c> flags can be stale: prefer
+    /// <see cref="Equipment"/> (never cached) for what is equipped.
+    /// </summary>
+    public Task<ApiResult<SectionResponse<List<InventoryItem>>>> GetInventoryAsync(CancellationToken ct) =>
+        OnDemandCallAsync((token, c) => _api.SectionAsync<List<InventoryItem>>(Port, "inventory", token, c), ct);
+
     public Task<ApiResult<ShopCategories>> GetShopCategoriesAsync(CancellationToken ct) =>
-        ShopCallAsync((token, c) => _api.ShopAsync(Port, token, c), ct);
+        OnDemandCallAsync((token, c) => _api.ShopAsync(Port, token, c), ct);
 
     public Task<ApiResult<ShopItems>> GetShopItemsAsync(int category, CancellationToken ct) =>
-        ShopCallAsync((token, c) => _api.ShopItemsAsync(Port, category, token, c), ct);
+        OnDemandCallAsync((token, c) => _api.ShopItemsAsync(Port, category, token, c), ct);
+
+    /// <summary>
+    /// Buys a shop item (<paramref name="qty"/> purchases of a consumable). Spends coins. On success the
+    /// coins are updated right away and wallet/equipment are re-fetched.
+    /// </summary>
+    public async Task<ApiResult<BuyResult>> BuyAsync(long itemId, int qty, CancellationToken ct)
+    {
+        var r = await OnDemandCallAsync((token, c) => _api.BuyAsync(Port, itemId, qty, token, c), ct).ConfigureAwait(false);
+        if (r.StatusCode is >= 200 and < 300)
+        {
+            if (r.Value is { } v && Wallet is { } w)
+            {
+                Wallet = w with { Coins = v.Coins };
+                Raise(SessionChange.Wallet);
+            }
+            RequestLiveRefresh(); // a bought consumable can be in a slot already (more uses)
+        }
+        return r;
+    }
+
+    /// <summary>
+    /// Equips an owned item (<paramref name="slot"/> null = the server picks the slot), or unequips it.
+    /// Not while alive in a match (409 "alive"). On success the equipped slots from the answer are
+    /// applied right away, and wallet/equipment are re-fetched.
+    /// </summary>
+    public async Task<ApiResult<EquipResult>> EquipAsync(long itemId, int? slot, bool unequip, CancellationToken ct)
+    {
+        var r = await OnDemandCallAsync((token, c) => _api.EquipAsync(Port, itemId, slot, unequip, token, c), ct).ConfigureAwait(false);
+        if (r.StatusCode is >= 200 and < 300)
+        {
+            if (r.Value?.Equip is { } equip)
+            {
+                Equipment = equip;
+                Raise(SessionChange.Equipment);
+            }
+            RequestLiveRefresh();
+        }
+        return r;
+    }
+
+    /// <summary>Re-reads /v1/gemtraining now (the gem training window opens) instead of waiting for the 15 s poll.</summary>
+    public async Task<ApiResult<SectionResponse<GemTraining>>> RefreshGemTrainingAsync(CancellationToken ct)
+    {
+        var r = await OnDemandCallAsync((token, c) => _api.SectionAsync<GemTraining>(Port, "gemtraining", token, c), ct).ConfigureAwait(false);
+        if (r.IsSuccess && r.Value?.Data is { } data)
+        {
+            GemTraining = data;
+            Raise(SessionChange.GemTraining);
+        }
+        return r;
+    }
+
+    /// <summary>
+    /// Puts a gem in a training slot, or empties the slot when <paramref name="gemId"/> is null (needs
+    /// the shop permission; slot 1 also equips the gem, so 409 "alive" in a match). The answer
+    /// (the new gem training, plus the equipped slots after a change of slot 1) is applied right away.
+    /// </summary>
+    public async Task<ApiResult<GemTraining>> SetGemTrainingAsync(int slot, long? gemId, CancellationToken ct)
+    {
+        var r = await OnDemandCallAsync((token, c) => _api.GemTrainingAsync(Port, slot, gemId, token, c), ct).ConfigureAwait(false);
+        if (r.StatusCode is not (>= 200 and < 300))
+            return new ApiResult<GemTraining>(r.StatusCode, null, r.Error);
+
+        GemTraining? data = null;
+        try
+        {
+            var root = r.Value;
+            // Same object as GET: maybe wrapped like the sections ({section, time, data}), maybe not.
+            var body = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.Object ? d : root;
+            data = body.Deserialize<GemTraining>(MitosJson.Options);
+            if (data is { Equip: null } && root.TryGetProperty("equip", out var e) && e.ValueKind == JsonValueKind.Array)
+                data = data with { Equip = e.Deserialize<List<EquipmentSlot>>(MitosJson.Options) };
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException) { }
+
+        if (data is { Enabled: true })
+        {
+            GemTraining = data with { Equip = null };
+            Raise(SessionChange.GemTraining);
+        }
+        if (data?.Equip is { } equip)
+        {
+            Equipment = equip;
+            Raise(SessionChange.Equipment);
+        }
+        if (data is null)
+            await RefreshGemTrainingAsync(ct).ConfigureAwait(false);
+        RequestLiveRefresh();
+        return new ApiResult<GemTraining>(r.StatusCode, data, null);
+    }
 
     /// <summary>
     /// Repairs one equipped item, or all the broken equipment when <paramref name="itemId"/> is null.
@@ -392,7 +490,7 @@ public sealed class ClientSession
     /// </summary>
     public async Task<ApiResult<RepairResult>> RepairAsync(long? itemId, CancellationToken ct)
     {
-        var r = await ShopCallAsync((token, c) => _api.RepairAsync(Port, itemId, token, c), ct).ConfigureAwait(false);
+        var r = await OnDemandCallAsync((token, c) => _api.RepairAsync(Port, itemId, token, c), ct).ConfigureAwait(false);
         if (r.StatusCode is >= 200 and < 300)
         {
             if (r.Value is { } v && Wallet is { } w)
@@ -405,7 +503,7 @@ public sealed class ClientSession
         return r;
     }
 
-    private async Task<ApiResult<T>> ShopCallAsync<T>(Func<string, CancellationToken, Task<ApiResult<T>>> call, CancellationToken ct)
+    private async Task<ApiResult<T>> OnDemandCallAsync<T>(Func<string, CancellationToken, Task<ApiResult<T>>> call, CancellationToken ct)
     {
         if (Status != SessionStatus.Connected || _token is not { } token)
             return new ApiResult<T>(0, default, "not_connected");

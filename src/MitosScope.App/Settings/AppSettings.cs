@@ -15,6 +15,9 @@ public sealed class AppSettings
 
     /// <summary>Position/size of each panel, keyed by panel id.</summary>
     public Dictionary<string, PanelLayout> Panels { get; set; } = [];
+
+    /// <summary>Inventory window: ids of the categories the player collapsed (ids, not names: names follow the game's language).</summary>
+    public List<int> CollapsedInventoryCategories { get; set; } = [];
 }
 
 public sealed class PanelLayout

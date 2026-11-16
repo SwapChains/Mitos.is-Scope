@@ -27,10 +27,12 @@ public partial class SessionViewModel : ViewModelBase
     [ObservableProperty] public partial SessionStatus Status { get; private set; }
     [ObservableProperty] public partial GameState? Game { get; private set; }
     [ObservableProperty] public partial AccountInfo? Account { get; private set; }
-    [ObservableProperty] public partial IReadOnlyList<InventoryItem>? Inventory { get; private set; }
     [ObservableProperty] public partial ProfileStats? Profile { get; private set; }
     [ObservableProperty] public partial IReadOnlyList<Quest>? Quests { get; private set; }
     [ObservableProperty] public partial IReadOnlyList<EquippedItemViewModel>? EquippedItems { get; private set; }
+
+    /// <summary>/v1/gemtraining (API v4), polled with the wallet; null on older clients.</summary>
+    [ObservableProperty] public partial GemTraining? GemTraining { get; private set; }
 
     public bool IsConnected => Status == SessionStatus.Connected;
 
@@ -230,12 +232,60 @@ public partial class SessionViewModel : ViewModelBase
         _ => $"Repair failed ({error ?? status.ToString()})",
     };
 
-    /// <summary>Equipped items from /v1/equipment, or from the inventory on clients without it.</summary>
+    // ---- equip / unequip (API v3, needs the shop permission) ----
+
+    /// <summary>Equipment can change only with the shop permission and while not alive in a match (else 409 "alive").</summary>
+    public bool CanChangeEquipment => HasShopScope && Game?.Alive != true;
+
+    /// <summary>Tooltip of the item icons in the Equipment panel.</summary>
+    public string UnequipTip => !HasShopScope ? "Needs the shop permission to change equipment"
+        : Game?.Alive == true ? "Equipment can't be changed while alive in a match"
+        : "Click to unequip";
+
+    /// <summary>Unequips one item (POST /v1/equip with unequip). The answer's slots replace the list right away.</summary>
+    [RelayCommand]
+    private async Task UnequipAsync(EquippedItemViewModel item)
+    {
+        if (!CanChangeEquipment || item.IsBusy)
+            return;
+        item.IsBusy = true;
+        item.ActionStatus = "Unequipping…";
+        var r = await Session.EquipAsync(item.Item.Id, null, unequip: true, CancellationToken.None);
+        item.IsBusy = false;
+        if (r.StatusCode is >= 200 and < 300)
+            return; // the item leaves the list (RebuildEquippedItems)
+
+        item.ActionStatus = EquipErrorText(r.StatusCode, r.Error, unequip: true);
+        await Task.Delay(RepairStatusTime);
+        item.ActionStatus = null;
+    }
+
+    /// <summary>Short text for a failed POST /v1/equip (Equipment panel and inventory window).</summary>
+    internal static string EquipErrorText(int status, string? error, bool unequip) => (status, error) switch
+    {
+        (0, "not_connected") => "Not connected",
+        (0, _) => "Game not responding",
+        (403, "scope_required" or "addon_scope_revoked") => "No shop permission",
+        (409, _) => "Not while alive in a match",
+        (_, "invalid_level") => "Your level is too low",
+        (_, "only_passive_pows_here") => "Only passive powers go in that slot",
+        (_, "cannot_equip_more_collector") => "Can't equip more collectors",
+        (_, "addon_already_equipped") => "Already equipped",
+        (_, "addon_not_equipped") => "Not equipped",
+        (504, _) => "Server timeout, try again",
+        _ => $"Couldn't {(unequip ? "unequip" : "equip")} ({error ?? status.ToString()})",
+    };
+
+    private void NotifyEquipAccess()
+    {
+        OnPropertyChanged(nameof(CanChangeEquipment));
+        OnPropertyChanged(nameof(UnequipTip));
+    }
+
+    /// <summary>Equipped items from /v1/equipment (API v3; nothing on older clients).</summary>
     private void RebuildEquippedItems()
     {
-        var slots = Session.Equipment
-                    ?? Session.Inventory?.Where(i => i.Equipped).Select(EquipmentSlot.FromInventory).ToList();
-        EquippedItems = slots?
+        EquippedItems = Session.Equipment?
             .OrderBy(i => i.Slot)
             .Select(i => new EquippedItemViewModel(i, this))
             .ToList();
@@ -291,15 +341,19 @@ public partial class SessionViewModel : ViewModelBase
             OnPropertyChanged(nameof(StatusText));
             OnPropertyChanged(nameof(IsConnected));
             OnPropertyChanged(nameof(HasShopScope));
+            NotifyEquipAccess();
         }
         if (change.HasFlag(SessionChange.Game))
         {
             // LastMatch first: on the death tick Game and LastMatch change together.
             if (change.HasFlag(SessionChange.LastMatch))
                 LastMatch = Session.Matches.Last;
+            var previousAlive = Game?.Alive;
             Game = Session.Game;
             OnPropertyChanged(nameof(HasMatchName));
             OnPropertyChanged(nameof(AliveText));
+            if (Game?.Alive != previousAlive)
+                NotifyEquipAccess();
             OnPropertyChanged(nameof(RoomTypeText));
             OnPropertyChanged(nameof(HasModeTitle));
             NotifyMatchRows();
@@ -320,6 +374,8 @@ public partial class SessionViewModel : ViewModelBase
             Wallet = Session.Wallet;
             NotifyCurrencies();
         }
+        if (change.HasFlag(SessionChange.GemTraining))
+            GemTraining = Session.GemTraining;
         if (change.HasFlag(SessionChange.Profile))
         {
             Profile = Session.Profile;
@@ -331,10 +387,7 @@ public partial class SessionViewModel : ViewModelBase
             Quests = Session.Quests;
             OnPropertyChanged(nameof(OpenQuestCount));
         }
-        if (change.HasFlag(SessionChange.Inventory))
-            Inventory = Session.Inventory;
-        // Inventory too: it's the fallback source, and RefreshItemIcons uses it to rebuild the rows.
-        if (change.HasFlag(SessionChange.Equipment) || change.HasFlag(SessionChange.Inventory))
+        if (change.HasFlag(SessionChange.Equipment))
             RebuildEquippedItems();
         if (change.HasFlag(SessionChange.BattlePass))
         {

@@ -2,7 +2,7 @@
 
 An overlay for the **Mitos.is** desktop client that shows your match, account, quests, battle pass and equipment on top of the game, for every account you have open.
 
-MitosScope only reads data through the game client's local addon API. It never changes anything in the game.
+MitosScope talks to the game client only through its local addon API. Reading needs the normal addon permission. Buying, repairing and changing equipment need the extra **shop** permission (a second popup in the game), spend coins only, and the game shows a notice for each of them.
 
 Created by **Chains** ([SwapChains](https://github.com/SwapChains)).
 
@@ -24,8 +24,11 @@ Created by **Chains** ([SwapChains](https://github.com/SwapChains)).
 | **Account** | Level and XP, coins, rating (MMR and rank), guild, server | Every 60 s |
 | **Quests** | Open quests with progress and reward | Every 60 s |
 | **Battle Pass** | Tier and expiry (premium only), type, current level and XP, next level | Every 60 s |
-| **Equipment** | Equipped items with durability | Every 60 s |
+| **Equipment** | Equipped items with durability; repair one or all with coins, click an icon to unequip | Every 15 s and on death |
 | **All Time Stats** | Time played, max score, kills, splits, ranked wins / losses | Every 60 s |
+| **Shop** | Click to open the shop window: categories, items with price, buy (several packs at once for consumables) | When opened |
+| **Inventory** | Click to open the inventory window: every owned item by category, equip / unequip (not while alive in a match) | When opened |
+| **Gem Training** | The 3 training slots (gem, level, Gem EXP, time to next level) and the bonus; click to open the window: put gems in slots or remove them | Every 15 s |
 
 ## Requirements
 

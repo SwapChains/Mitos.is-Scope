@@ -74,6 +74,7 @@ public sealed record AccountInfo
     public Guild? Guild { get; init; }
 }
 
+/// <summary>/v1/inventory: one owned item. Read on demand by the inventory window (cached ~60 s by the server).</summary>
 public sealed record InventoryItem
 {
     public long Id { get; init; }
@@ -111,19 +112,6 @@ public sealed record EquipmentSlot
     public long MaxDurability { get; init; }
     /// <summary>Coins to repair it; 0 when it isn't damaged or can't be repaired.</summary>
     public long RepairPrice { get; init; }
-
-    /// <summary>Fallback for clients without /v1/equipment: an equipped item from /v1/inventory (no repair price).</summary>
-    public static EquipmentSlot FromInventory(InventoryItem i) => new()
-    {
-        Slot = i.Slot,
-        Id = i.Id,
-        Name = i.Name,
-        Type = i.Type,
-        Category = i.Category,
-        Sprite = i.Sprite,
-        Durability = i.Durability,
-        MaxDurability = i.MaxDurability,
-    };
 }
 
 // ---- shop (API v3, needs the "shop" permission) ----
@@ -156,6 +144,78 @@ public sealed record ShopItem
 
 /// <summary>GET /v1/shop/items?category=N</summary>
 public sealed record ShopItems(int Category, long Coins, IReadOnlyList<ShopItem> Items);
+
+/// <summary>POST /v1/shop/buy: the uses the player now has (<c>durability</c>), the coins left and the coins actually taken.</summary>
+public sealed record BuyResult(long Id, string? Name, long Durability, long Coins, long Spent);
+
+/// <summary>POST /v1/equip: the item's new state and, in <c>equip</c>, all the equipped slots (like /v1/equipment).</summary>
+public sealed record EquipResult(long Id, string? Name, bool Equipped, int Slot, IReadOnlyList<EquipmentSlot>? Equip);
+
+// ---- gem training (API v4: GET needs the token, POST the "shop" permission) ----
+
+/// <summary>/v1/gemtraining. When <see cref="Enabled"/> is false the other fields are missing.</summary>
+public sealed record GemTraining
+{
+    public bool Enabled { get; init; }
+    /// <summary>Gem EXP a training gem gets every hour.</summary>
+    public long ExpPerHour { get; init; }
+    public IReadOnlyList<GemTrainingSlot> Slots { get; init; } = [];
+    public IReadOnlyList<OwnedGem> Owned { get; init; } = [];
+    public GemTrainingBonus? Bonus { get; init; }
+    /// <summary>Only in the POST answer after a change of slot 1: all the equipped slots, like /v1/equipment.</summary>
+    public IReadOnlyList<EquipmentSlot>? Equip { get; init; }
+}
+
+public sealed record GemTrainingSlot
+{
+    /// <summary>1 = free, trains the gem equipped in the gem slot; 2 = premium battle pass; 3 = coin pack bought this month.</summary>
+    public int Slot { get; init; }
+    /// <summary>"free", "premium" or "coinpack".</summary>
+    public string? Unlock { get; init; }
+    /// <summary>Seconds left on the unlock (0 = no expiry).</summary>
+    public long Until { get; init; }
+    /// <summary>"active", "empty", "locked" or "completed" (a gem just finished its level, shown once).</summary>
+    public string? State { get; init; }
+    public TrainingGem? Gem { get; init; }
+}
+
+/// <summary>The gem in a training slot.</summary>
+public sealed record TrainingGem
+{
+    public long Id { get; init; }
+    public string? Name { get; init; }
+    public string? Sprite { get; init; }
+    public string? Color { get; init; }
+    public long Level { get; init; }
+    public long Exp { get; init; }
+    public long ExpMax { get; init; }
+    /// <summary>Seconds until the next level.</summary>
+    public long Eta { get; init; }
+    /// <summary>Seconds until the next hourly Gem EXP.</summary>
+    public long NextTickIn { get; init; }
+    public long Rate { get; init; }
+}
+
+/// <summary>A gem the player owns.</summary>
+public sealed record OwnedGem
+{
+    public long Id { get; init; }
+    public string? Sprite { get; init; }
+    public string? Name { get; init; }
+    public string? Color { get; init; }
+    public long Level { get; init; }
+    /// <summary>Player level needed to use it.</summary>
+    public long ReqLevel { get; init; }
+    public long Exp { get; init; }
+    public long ExpMax { get; init; }
+    public bool Equipped { get; init; }
+    /// <summary>Last level: only grows by playing, can't go in slots 2-3.</summary>
+    public bool PlayOnly { get; init; }
+    /// <summary>The slot it trains in (0 = none).</summary>
+    public int Training { get; init; }
+}
+
+public sealed record GemTrainingBonus(long OwnedCount, long BonusPct, long TrainingCount);
 
 /// <summary>POST /v1/repair: the coins left and the coins actually taken.</summary>
 public sealed record RepairResult(long Coins, long Spent);

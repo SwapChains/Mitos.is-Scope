@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MitosScope.App.ViewModels"
+             xmlns:panels="using:MitosScope.App.ViewModels.Panels"
+             x:Class="MitosScope.App.Views.Panels.GemTrainingPanelView"
+             x:DataType="panels:GemTrainingPanelViewModel">
+    <!-- Compact view of the 3 slots. The whole card is clickable outside edit mode: opens/closes the gem training window. -->
+    <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Classes="title" Text="Gem Training" Margin="0,0,0,6" />
+        <TextBlock DockPanel.Dock="Bottom" Classes="muted" FontSize="11" Text="{Binding Gems.CardText}" Margin="0,4,0,0" />
+        <TextBlock DockPanel.Dock="Top" Classes="muted" Text="{Binding Gems.StateText}" TextWrapping="Wrap"
+                   IsVisible="{Binding Gems.HasStateText}" />
+        <TextBlock DockPanel.Dock="Top" FontSize="11" Foreground="#FFFFD060" Text="{Binding Gems.BonusText}"
+                   TextTrimming="CharacterEllipsis" Margin="0,0,0,4" IsVisible="{Binding Gems.HasData}" />
+
+        <ItemsControl ItemsSource="{Binding Gems.Slots}" IsVisible="{Binding Gems.HasData}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:GemSlotViewModel">
+                    <StackPanel Spacing="2" Margin="0,0,0,5">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#A0FFFFFF" Text="{Binding Number}" />
+                            <TextBlock Grid.Column="1" FontSize="12" Text="{Binding SummaryText}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" FontSize="11" Foreground="#A0FFFFFF" Text="{Binding ShortEtaText}" />
+                        </Grid>
+                        <ProgressBar Minimum="0" Maximum="1" MinWidth="0" Height="3" MinHeight="3"
+                                     Value="{Binding ExpFraction}" IsVisible="{Binding HasGem}" />
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </DockPanel>
+</UserControl>

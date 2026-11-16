@@ -50,6 +50,16 @@ public sealed partial class EquippedItemViewModel(EquipmentSlot item, SessionVie
     public bool CanRepair => Item.RepairPrice > 0;
     public string RepairText => RepairStatus ?? (CanRepair ? $"Repair: {Item.RepairPrice:N0} coins" : "");
 
+    /// <summary>"Unequipping…" or why it failed, under the name for a few seconds.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActionStatus))]
+    public partial string? ActionStatus { get; set; }
+
+    public bool HasActionStatus => ActionStatus is not null;
+
+    /// <summary>An unequip of this item is running.</summary>
+    [ObservableProperty] public partial bool IsBusy { get; set; }
+
     /// <summary>Shown on the repair button instead of the price for a few seconds ("Repairing…", errors).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RepairText))]
