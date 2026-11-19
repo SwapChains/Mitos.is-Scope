@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -18,6 +18,9 @@ public sealed class AppSettings
 
     /// <summary>Inventory window: ids of the categories the player collapsed (ids, not names: names follow the game's language).</summary>
     public List<int> CollapsedInventoryCategories { get; set; } = [];
+
+    /// <summary>Game executable of the last client seen (from its window), used by tray "Open Instance".</summary>
+    public string? GamePath { get; set; }
 }
 
 public sealed class PanelLayout
