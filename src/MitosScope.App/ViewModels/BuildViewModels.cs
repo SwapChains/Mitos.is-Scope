@@ -8,22 +8,43 @@ using MitosScope.Core.Items;
 
 namespace MitosScope.App.ViewModels;
 
-/// <summary>An attribute the player can pick in the shop build tool.</summary>
-public sealed partial class BuildAttrViewModel(string name, string label, bool selected) : ObservableObject
+/// <summary>
+/// An attribute the player can pick in the shop build tool. <see cref="Priority"/> is the order it was
+/// clicked in (1 = maximized first), 0 when not picked.
+/// </summary>
+public sealed partial class BuildAttrViewModel(string name, string label) : ObservableObject
 {
     public string Name { get; } = name;
     public string Label { get; } = label;
 
-    [ObservableProperty] public partial bool IsSelected { get; set; } = selected;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSelected), nameof(PriorityText), nameof(Tip))]
+    public partial int Priority { get; set; }
+
+    public bool IsSelected => Priority > 0;
+
+    /// <summary>"1°", "2°"…</summary>
+    public string PriorityText => Priority > 0 ? $"{Priority}°" : "";
+
+    public string Tip => Priority switch
+    {
+        0 => "Click to maximize it (the order you click sets the priority)",
+        1 => "Maximized first. Click to remove it",
+        _ => $"Priority {Priority}: decides only between builds equal in the attributes before it. Click to remove it",
+    };
 }
 
 /// <summary>One attribute line of a build or a set: "+30 Speed", highlighted when it's one the player picked.</summary>
-public sealed class AttrLineViewModel(ItemAttr attr, bool wanted)
+public sealed class AttrLineViewModel(ItemAttr attr, bool wanted, int priority = 0)
 {
     public ItemAttr Attr { get; } = attr;
     public string ValueText => Attr.ValueText;
     public string Name => Attr.DisplayName;
     public bool IsWanted { get; } = wanted;
+
+    /// <summary>"1°" before the picked attributes of a build.</summary>
+    public string PriorityText { get; } = priority > 0 ? $"{priority}°" : "";
+    public bool HasPriority => priority > 0;
     public bool IsNegative => Attr.IsNegative;
     public bool IsPlain => !IsWanted && !IsNegative;
 }
@@ -44,13 +65,17 @@ public sealed class BuildPickViewModel(BuildCandidate item, ShopItemViewModel? s
 /// <summary>One combination found by the build tool.</summary>
 public sealed class BuildResultViewModel
 {
-    public BuildResultViewModel(int rank, BuildResult result, IReadOnlySet<string> wanted, IReadOnlyDictionary<long, ShopItemViewModel> shop)
+    public BuildResultViewModel(int rank, BuildResult result, IReadOnlyList<BuildAttrViewModel> wanted, IReadOnlyDictionary<long, ShopItemViewModel> shop)
     {
         Result = result;
         Rank = rank;
         Picks = result.Items.Select(i => new BuildPickViewModel(i, shop.GetValueOrDefault(i.Id))).ToList();
-        Wanted = result.Totals.Where(a => wanted.Contains(a.Name)).Select(a => new AttrLineViewModel(a, true)).ToList();
-        Others = result.Totals.Where(a => !wanted.Contains(a.Name)).Select(a => new AttrLineViewModel(a, false)).ToList();
+        // the picked attributes in priority order, with their total (also when the build gives 0 of one)
+        Wanted = wanted.Select((w, i) => new AttrLineViewModel(
+                new ItemAttr { Name = w.Name, Label = w.Label, Value = result.Scores[i] }, true, i + 1))
+            .ToList();
+        var names = wanted.Select(w => w.Name).ToHashSet();
+        Others = result.Totals.Where(a => !names.Contains(a.Name)).Select(a => new AttrLineViewModel(a, false)).ToList();
     }
 
     public BuildResult Result { get; }
@@ -62,7 +87,8 @@ public sealed class BuildResultViewModel
     public IReadOnlyList<AttrLineViewModel> Others { get; }
     public bool HasOthers => Others.Count > 0;
 
-    public string ScoreText => $"+{Result.Score:0.##} points";
+    /// <summary>The total of the 1st attribute, the one that ranks the builds.</summary>
+    public string ScoreText => Wanted.Count > 0 ? $"{Wanted[0].ValueText} {Wanted[0].Name}" : "";
 
     public string CostText => Result.Cost > 0
         ? $"To buy: {Result.Cost:N0} coins ({Picks.Count(p => !p.IsOwned)} item{(Picks.Count(p => !p.IsOwned) == 1 ? "" : "s")})"

@@ -67,6 +67,21 @@
         <Setter Property="Foreground" Value="White" />
     </Style>
 
+    <!-- "1°", "2°": priority of a picked attribute in the build tool. -->
+    <Style Selector="Border.priority">
+        <Setter Property="Background" Value="#FFFFD060" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="5,0" />
+        <Setter Property="MinWidth" Value="22" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.priority TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="#FF201800" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+
     <Style Selector="Border.card">
         <Setter Property="Background" Value="#18FFFFFF" />
         <Setter Property="BorderBrush" Value="#30FFFFFF" />

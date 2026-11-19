@@ -211,7 +211,7 @@ public partial class ShopViewModel : PopupViewModel
     [ObservableProperty] public partial bool BuildUseOwned { get; set; }
 
     public string BuildHint => BuildAttrs is null ? ""
-        : !BuildAttrs.Any(a => a.IsSelected) ? "Pick one or more attributes: the tool finds the 3 items (one per category) that give the most points in them."
+        : !BuildAttrs.Any(a => a.IsSelected) ? "Pick the attributes in order of priority: the 1° is maximized first, the 2° decides between builds equal in the 1°, and so on. The tool finds the best 3 items (one per category)."
         : HasBuildResults ? ""
         : "No equipment gives these attributes with the options chosen.";
 
@@ -397,11 +397,25 @@ public partial class ShopViewModel : PopupViewModel
         UpdateBuild();
     }
 
+    /// <summary>The picked attributes in priority order (the order they were clicked).</summary>
+    private List<BuildAttrViewModel> PickedAttrs => BuildAttrs?.Where(a => a.IsSelected).OrderBy(a => a.Priority).ToList() ?? [];
+
+    /// <summary>
+    /// Picks the attribute as the next priority (last), or removes it: the ones after it move up one.
+    /// The order is saved in settings.json.
+    /// </summary>
     [RelayCommand]
     private void ToggleBuildAttr(BuildAttrViewModel attr)
     {
-        attr.IsSelected = !attr.IsSelected;
-        _settings.BuildAttrs = BuildAttrs?.Where(a => a.IsSelected).Select(a => a.Name).ToList() ?? [];
+        var picked = PickedAttrs;
+        if (attr.IsSelected)
+            picked.Remove(attr);
+        else
+            picked.Add(attr);
+        attr.Priority = 0;
+        for (var i = 0; i < picked.Count; i++)
+            picked[i].Priority = i + 1;
+        _settings.BuildAttrs = picked.Select(a => a.Name).ToList();
         SettingsStore.Save(_settings);
         UpdateBuild();
     }
@@ -410,7 +424,7 @@ public partial class ShopViewModel : PopupViewModel
     private void ClearBuildAttrs()
     {
         foreach (var a in BuildAttrs ?? [])
-            a.IsSelected = false;
+            a.Priority = 0;
         _settings.BuildAttrs = [];
         SettingsStore.Save(_settings);
         UpdateBuild();
@@ -422,7 +436,7 @@ public partial class ShopViewModel : PopupViewModel
     {
         if (_session?.Account?.Id is not { } account)
             return;
-        var name = string.Join(" + ", BuildAttrs?.Where(a => a.IsSelected).Select(a => a.Label) ?? []);
+        var name = string.Join(" + ", PickedAttrs.Select(a => a.Label));
         var set = _sets.Add(account, name, build.Picks.Select(p => new ItemSetEntry
         {
             Id = p.Item.Id,
@@ -585,13 +599,17 @@ public partial class ShopViewModel : PopupViewModel
         IsLoading = false;
         LoadingText = "Loading…";
 
-        var wanted = _settings.BuildAttrs.ToHashSet();
         BuildAttrs = Candidates(all, _owned, useOwned: true)
             .SelectMany(c => c.Attrs)
             .GroupBy(a => a.Name)
-            .Select(g => new BuildAttrViewModel(g.Key, g.First().DisplayName, wanted.Contains(g.Key)))
+            .Select(g => new BuildAttrViewModel(g.Key, g.First().DisplayName))
             .OrderBy(a => a.Label, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
+        // the saved choice, in its order (attributes no longer on any item are dropped)
+        var n = 0;
+        foreach (var name in _settings.BuildAttrs)
+            if (BuildAttrs.FirstOrDefault(a => a.Name == name) is { Priority: 0 } attr)
+                attr.Priority = ++n;
         UpdateBuild();
 
         if (keepCard && SelectedItem is { } selected)
@@ -621,9 +639,9 @@ public partial class ShopViewModel : PopupViewModel
     {
         if (!IsBuildPage || _allItems is not { } all || BuildAttrs is null)
             return;
-        var wanted = BuildAttrs.Where(a => a.IsSelected).Select(a => a.Name).ToHashSet();
+        var wanted = PickedAttrs;
         var shopById = all.Values.SelectMany(i => i).GroupBy(i => i.Item.Id).ToDictionary(g => g.Key, g => g.First());
-        var results = BuildOptimizer.Find(Candidates(all, _owned, BuildUseOwned), wanted, new BuildOptions
+        var results = BuildOptimizer.Find(Candidates(all, _owned, BuildUseOwned), wanted.Select(a => a.Name).ToList(), new BuildOptions
         {
             MaxLevel = BuildMyLevel ? _session?.Account?.Level : null,
             Budget = BuildMyCoins ? Coins : null,

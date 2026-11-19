@@ -183,7 +183,7 @@
                 <DockPanel IsVisible="{Binding IsBuildPage}">
                     <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
                         <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Classes="section" Text="ATTRIBUTES TO MAXIMIZE" VerticalAlignment="Center" />
+                            <TextBlock Classes="section" Text="ATTRIBUTES TO MAXIMIZE · CLICK IN ORDER OF PRIORITY" VerticalAlignment="Center" />
                             <Button Grid.Column="1" Classes="flat small" Content="Clear" Command="{Binding ClearBuildAttrsCommand}" />
                         </Grid>
                         <ItemsControl ItemsSource="{Binding BuildAttrs}">
@@ -194,9 +194,16 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:BuildAttrViewModel">
-                                    <ToggleButton Classes="chip" Content="{Binding Label}" IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                    <ToggleButton Classes="chip" IsChecked="{Binding IsSelected, Mode=OneWay}" ToolTip.Tip="{Binding Tip}"
                                                   Command="{Binding $parent[UserControl].((vm:ShopViewModel)DataContext).ToggleBuildAttrCommand}"
-                                                  CommandParameter="{Binding}" />
+                                                  CommandParameter="{Binding}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Border Classes="priority" IsVisible="{Binding IsSelected}">
+                                                <TextBlock Text="{Binding PriorityText}" />
+                                            </Border>
+                                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </ToggleButton>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -260,6 +267,9 @@
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:AttrLineViewModel">
                                                         <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,14,0">
+                                                            <Border Classes="priority" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding PriorityText}" />
+                                                            </Border>
                                                             <TextBlock Classes="attrValue wanted" MinWidth="0" FontSize="13" Text="{Binding ValueText}" />
                                                             <TextBlock Classes="attrName" FontSize="13" FontWeight="SemiBold" Text="{Binding Name}" />
                                                         </StackPanel>
