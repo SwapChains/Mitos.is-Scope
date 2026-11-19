@@ -1,12 +1,13 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:MitosScope.App.ViewModels"
+             xmlns:api="using:MitosScope.Core.Api"
              x:Class="MitosScope.App.Views.InventoryView"
              x:DataType="vm:InventoryViewModel">
     <UserControl.Styles>
         <!-- Item tiles: buttons that open the item card. -->
         <Style Selector="Button.item">
-            <Setter Property="Width" Value="120" />
+            <Setter Property="Width" Value="124" />
             <Setter Property="Margin" Value="0,0,8,8" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="CornerRadius" Value="6" />
@@ -30,21 +31,74 @@
         <Style Selector="Button.action:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="#A040C060" />
         </Style>
+        <!-- Tabs: Items / Item sets -->
+        <Style Selector="ToggleButton.tab">
+            <Setter Property="Padding" Value="14,5" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Background" Value="#18FFFFFF" />
+            <Setter Property="Foreground" Value="#C0FFFFFF" />
+        </Style>
+        <Style Selector="ToggleButton.tab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#30FFFFFF" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="ToggleButton.tab:checked /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#6040A0FF" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <!-- Items of a set -->
+        <Style Selector="Border.setItem">
+            <Setter Property="Width" Value="200" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Background" Value="#14FFFFFF" />
+            <Setter Property="BorderBrush" Value="#20FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Border.setItem.missing">
+            <Setter Property="Opacity" Value="0.5" />
+            <Setter Property="BorderBrush" Value="#80FF7070" />
+        </Style>
+        <Style Selector="Border.setItem.equipped">
+            <Setter Property="BorderBrush" Value="#8040C060" />
+        </Style>
+        <Style Selector="Button.choice">
+            <Setter Property="Width" Value="186" />
+            <Setter Property="Margin" Value="0,0,6,6" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="#14FFFFFF" />
+        </Style>
     </UserControl.Styles>
 
     <Panel>
         <DockPanel>
-            <!-- Header: title, refresh, close -->
-            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" Margin="0,0,0,10">
+            <!-- Header: title, tabs, refresh, close -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" Margin="0,0,0,8">
                 <TextBlock Classes="title" FontSize="18" VerticalAlignment="Center" Text="Inventory" />
-                <Button Grid.Column="1" Classes="flat" Content="Refresh" Padding="8,3" FontSize="12"
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0">
+                    <ToggleButton Classes="tab" Content="Items" IsChecked="{Binding IsItemsTab, Mode=OneWay}" Command="{Binding ShowItemsCommand}" />
+                    <ToggleButton Classes="tab" Content="Item sets" IsChecked="{Binding IsSetsTab, Mode=OneWay}" Command="{Binding ShowSetsCommand}" />
+                </StackPanel>
+                <Button Grid.Column="2" Classes="flat" Content="Refresh" Padding="8,3" FontSize="12"
                         ToolTip.Tip="Reload the items (the game updates this list about once a minute)"
                         IsEnabled="{Binding !IsLoading}" Command="{Binding RetryCommand}" />
-                <Button Grid.Column="2" Classes="flat danger" Width="24" Height="24" Padding="0"
+                <Button Grid.Column="3" Classes="flat danger" Width="24" Height="24" Padding="0"
                         HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                         ToolTip.Tip="Close the inventory" Command="{Binding CloseCommand}">
                     <TextBlock Text="✕" FontSize="12" />
                 </Button>
+            </Grid>
+
+            <!-- Search -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,0,0,10" IsVisible="{Binding ShowSearch}">
+                <TextBox Classes="search" Watermark="{Binding SearchHint}" Text="{Binding SearchText}" />
+                <Button Grid.Column="1" Classes="flat small" Content="Clear" IsVisible="{Binding HasSearch}"
+                        Command="{Binding ClearSearchCommand}" />
             </Grid>
 
             <!-- Loading / error / empty -->
@@ -58,94 +112,325 @@
                         IsVisible="{Binding CanBrowse}" Command="{Binding RetryCommand}" />
             </StackPanel>
             <TextBlock DockPanel.Dock="Top" Classes="muted" Text="No items." IsVisible="{Binding IsEmpty}" />
+            <TextBlock DockPanel.Dock="Top" Classes="muted" Text="No items match the search." IsVisible="{Binding NoResults}" />
 
-            <!-- Items grouped by category; a click opens the item card -->
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding Groups}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:InventoryGroupViewModel">
-                            <StackPanel Margin="0,0,0,6">
-                                <!-- Category row: name and count, show/hide arrow on the right (saved). -->
-                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,0,22,6">
-                                    <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#C0FFFFFF"
-                                               Text="{Binding Header}" VerticalAlignment="Center" />
-                                    <Button Grid.Column="1" Classes="flat" Width="26" Height="22" Padding="0"
-                                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                            ToolTip.Tip="{Binding ToggleTip}"
-                                            Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).ToggleGroupCommand}"
-                                            CommandParameter="{Binding}">
-                                        <TextBlock Text="{Binding ArrowText}" FontSize="10" />
-                                    </Button>
-                                </Grid>
-                                <ItemsControl ItemsSource="{Binding Items}" IsVisible="{Binding IsExpanded}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:InventoryItemViewModel">
-                                            <Button Classes="flat item" Classes.equipped="{Binding IsEquipped}"
-                                                    Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).SelectItemCommand}"
-                                                    CommandParameter="{Binding}">
-                                                <Border Classes="itemFrame" Padding="6" CornerRadius="6"
-                                                        BorderBrush="#30FFFFFF" BorderThickness="1">
-                                                    <StackPanel Spacing="2">
-                                                        <Border Width="48" Height="48" CornerRadius="4" Background="#20FFFFFF" HorizontalAlignment="Center">
-                                                            <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="3" />
-                                                        </Border>
-                                                        <TextBlock FontSize="11" FontWeight="SemiBold" Text="{Binding Name}"
-                                                                   TextAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                                        <TextBlock FontSize="10" Foreground="#A0FFFFFF" Text="{Binding DetailText}"
-                                                                   TextAlignment="Center" IsVisible="{Binding HasDetailText}" />
-                                                        <TextBlock FontSize="10" Foreground="#FF60D080" Text="Equipped"
-                                                                   TextAlignment="Center" IsVisible="{Binding IsEquipped}" />
+            <Panel>
+                <!-- Tab 1: items grouped by category; a click opens the item card -->
+                <ScrollViewer IsVisible="{Binding IsItemsTab}" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Groups}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:InventoryGroupViewModel">
+                                <StackPanel Margin="0,0,0,6">
+                                    <!-- Category row: name and count, show/hide arrow on the right (saved). -->
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,0,22,6">
+                                        <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#C0FFFFFF"
+                                                   Text="{Binding Header}" VerticalAlignment="Center" />
+                                        <Button Grid.Column="1" Classes="flat" Width="26" Height="22" Padding="0"
+                                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                                ToolTip.Tip="{Binding ToggleTip}"
+                                                Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).ToggleGroupCommand}"
+                                                CommandParameter="{Binding}">
+                                            <TextBlock Text="{Binding ArrowText}" FontSize="10" />
+                                        </Button>
+                                    </Grid>
+                                    <ItemsControl ItemsSource="{Binding Items}" IsVisible="{Binding IsExpanded}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:InventoryItemViewModel">
+                                                <Button Classes="flat item" Classes.equipped="{Binding IsEquipped}"
+                                                        Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).SelectItemCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <Border Classes="itemFrame" Padding="6" CornerRadius="6"
+                                                            BorderBrush="#30FFFFFF" BorderThickness="1">
+                                                        <StackPanel Spacing="2">
+                                                            <Border Width="48" Height="48" CornerRadius="4" Background="#20FFFFFF" HorizontalAlignment="Center">
+                                                                <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="3" />
+                                                            </Border>
+                                                            <TextBlock FontSize="11" FontWeight="SemiBold" Text="{Binding Name}"
+                                                                       TextAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Classes="tileAttrs" Text="{Binding AttrsShortText}" IsVisible="{Binding HasAttrs}" />
+                                                            <TextBlock FontSize="10" Foreground="#A0FFFFFF" Text="{Binding DetailText}"
+                                                                       TextAlignment="Center" IsVisible="{Binding HasDetailText}" />
+                                                            <TextBlock FontSize="10" Foreground="#FF60D080" Text="Equipped"
+                                                                       TextAlignment="Center" IsVisible="{Binding IsEquipped}" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <!-- Tab 2: item sets -->
+                <DockPanel IsVisible="{Binding IsSetsTab}">
+                    <!-- Set list -->
+                    <DockPanel IsVisible="{Binding ShowSetList}">
+                        <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                                <TextBlock Classes="muted" Text="{Binding SetsCountText}" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Classes="flat small" Content="+ From equipped"
+                                        ToolTip.Tip="A new set with the 3 items you have equipped now"
+                                        Command="{Binding NewSetFromEquippedCommand}" />
+                                <Button Grid.Column="2" Classes="flat accent" Content="+ New set" Command="{Binding NewSetCommand}" />
+                            </Grid>
+                            <TextBlock Classes="muted" Foreground="#FFFFB060" Text="{Binding SetsHint}" IsVisible="{Binding HasSetsHint}" />
+                            <TextBlock Classes="muted" Text="{Binding SetsStatus}"
+                                       IsVisible="{Binding SetsStatus, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                            <TextBlock Classes="muted" IsVisible="{Binding !HasSets}"
+                                       Text="No item sets yet. Make one with your equipment (or save a build from the shop's Build tool), then swap to it in one click." />
+                        </StackPanel>
+
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Sets}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ItemSetViewModel">
+                                        <Border Classes="card" Classes.active="{Binding IsActive}" Margin="0,0,14,8">
+                                            <StackPanel Spacing="6">
+                                                <!-- Name (or rename box) and actions -->
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" IsVisible="{Binding !IsRenaming}">
+                                                        <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="Bold" />
+                                                        <TextBlock Text="{Binding SummaryText}" FontSize="11" Foreground="#90FFFFFF" VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding PointsText}" FontSize="11" Foreground="#FF8CE06A" VerticalAlignment="Center" />
                                                     </StackPanel>
+                                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" IsVisible="{Binding IsRenaming}">
+                                                        <TextBox Classes="search" MaxLength="24" Text="{Binding RenameText}" Watermark="Set name" />
+                                                        <Button Grid.Column="1" Classes="flat accent" Content="Save"
+                                                                Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).ConfirmRenameCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                        <Button Grid.Column="2" Classes="flat small" Content="Cancel"
+                                                                Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).CancelRenameCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                    </Grid>
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                                        <Button Classes="flat small" Content="▲" ToolTip.Tip="Move up" IsEnabled="{Binding CanMoveUp}"
+                                                                Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).MoveSetUpCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                        <Button Classes="flat small" Content="▼" ToolTip.Tip="Move down" IsEnabled="{Binding CanMoveDown}"
+                                                                Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).MoveSetDownCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                        <Button Classes="flat small" Content="Rename"
+                                                                Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).StartRenameCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                        <Button Classes="flat small" Content="Edit"
+                                                                Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).EditSetCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                        <Button Classes="flat danger small" Content="Delete" IsVisible="{Binding !IsConfirmingDelete}"
+                                                                Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).AskDeleteCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                        <Button Classes="flat danger small" Content="Sure? Delete" IsVisible="{Binding IsConfirmingDelete}"
+                                                                Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).DeleteSetCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                        <Button Classes="flat small" Content="Keep" IsVisible="{Binding IsConfirmingDelete}"
+                                                                Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).CancelDeleteCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                        <Button Classes="flat accent" MinWidth="96" HorizontalContentAlignment="Center"
+                                                                Content="{Binding EquipText}"
+                                                                IsEnabled="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).CanEquipSets}"
+                                                                Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).EquipSetCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                    </StackPanel>
+                                                </Grid>
+
+                                                <!-- Items -->
+                                                <ItemsControl ItemsSource="{Binding Items}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <WrapPanel />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:ItemSetItemViewModel">
+                                                            <Border Classes="setItem" Classes.missing="{Binding IsMissing}" Classes.equipped="{Binding IsEquipped}"
+                                                                    ToolTip.Tip="{Binding Tip}">
+                                                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                                    <Border Width="36" Height="36" CornerRadius="4" Background="#20FFFFFF">
+                                                                        <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="2" />
+                                                                    </Border>
+                                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                                                        <TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                                        <TextBlock FontSize="10" Foreground="#A0FFFFFF" Text="{Binding StateText}" IsVisible="{Binding HasStateText}" />
+                                                                    </StackPanel>
+                                                                </Grid>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
+                                                <!-- What the set gives -->
+                                                <ItemsControl ItemsSource="{Binding Totals}" IsVisible="{Binding HasTotals}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <WrapPanel />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:AttrLineViewModel">
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,0">
+                                                                <TextBlock Classes="attrValue" Classes.negative="{Binding IsNegative}" MinWidth="0" Text="{Binding ValueText}" />
+                                                                <TextBlock Classes="attrName" Text="{Binding Name}" />
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+
+                    <!-- Set editor: name, 3 slots, totals, then the owned equipment to add -->
+                    <DockPanel IsVisible="{Binding IsEditing}">
+                        <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,8">
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                                <TextBlock Classes="title" Text="{Binding EditorTitle}" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1" Classes="search" MaxLength="24" Watermark="Set name (e.g. Speed, Tank…)" Text="{Binding EditName}" />
+                                <Button Grid.Column="2" Classes="flat accent" Content="Save set" Command="{Binding SaveSetCommand}" />
+                                <Button Grid.Column="3" Classes="flat small" Content="Cancel" Command="{Binding CancelEditCommand}" />
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding EditSlots}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Rows="1" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:SetSlotViewModel">
+                                        <Border Classes="card" Margin="0,0,8,0" Padding="8,6">
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                                <Border Width="40" Height="40" CornerRadius="4" Background="#20FFFFFF">
+                                                    <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="2" />
                                                 </Border>
-                                            </Button>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                                    <TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock FontSize="10" Foreground="#FF8CE06A" Text="{Binding AttrsText}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <Button Grid.Column="2" Classes="flat danger" Width="22" Height="22" Padding="0" VerticalAlignment="Top"
+                                                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                                        ToolTip.Tip="Remove from the set" IsVisible="{Binding HasItem}"
+                                                        Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).RemoveFromSetCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <TextBlock Text="✕" FontSize="10" />
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <ItemsControl ItemsSource="{Binding EditTotals}" IsVisible="{Binding HasEditTotals}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AttrLineViewModel">
+                                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,0">
+                                            <TextBlock Classes="attrValue" Classes.negative="{Binding IsNegative}" MinWidth="0" Text="{Binding ValueText}" />
+                                            <TextBlock Classes="attrName" Text="{Binding Name}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Classes="error" Text="{Binding EditError}"
+                                       IsVisible="{Binding EditError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                            <TextBlock Classes="section" Text="YOUR EQUIPMENT · CLICK TO ADD (ONE PER CATEGORY)" />
+                        </StackPanel>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding EditChoices}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:InventoryItemViewModel">
+                                        <Button Classes="flat choice" ToolTip.Tip="{Binding AttrsTip}"
+                                                Command="{Binding $parent[UserControl].((vm:InventoryViewModel)DataContext).AddToSetCommand}"
+                                                CommandParameter="{Binding}">
+                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                <Border Width="36" Height="36" CornerRadius="4" Background="#20FFFFFF">
+                                                    <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="2" />
+                                                </Border>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                                    <TextBlock FontSize="11" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock FontSize="10" Foreground="#FF8CE06A" Text="{Binding AttrsShortText}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock FontSize="10" Foreground="#FF60D080" Text="Equipped" IsVisible="{Binding IsEquipped}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </DockPanel>
+            </Panel>
         </DockPanel>
 
         <!-- Card of the clicked item, centered over the list. A click outside it closes it. -->
         <Border Background="#B0000000" CornerRadius="6" Margin="-14,-10"
                 IsVisible="{Binding HasSelectedItem}" PointerPressed="OnBackdropPressed">
-            <Border Width="300" HorizontalAlignment="Center" VerticalAlignment="Center"
+            <Border Width="340" MaxHeight="540" HorizontalAlignment="Center" VerticalAlignment="Center"
                     Padding="16,14" CornerRadius="8" Background="#FF181E24" BorderBrush="#40FFFFFF" BorderThickness="1">
-                <StackPanel Spacing="8">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding SelectedItem.Name}"
-                                   TextWrapping="Wrap" VerticalAlignment="Center" />
-                        <Button Grid.Column="1" Classes="flat" Width="24" Height="24" Padding="0" VerticalAlignment="Top"
-                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                ToolTip.Tip="Close" Command="{Binding CloseItemCommand}">
-                            <TextBlock Text="✕" FontSize="12" />
-                        </Button>
-                    </Grid>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding SelectedItem.Name}"
+                                       TextWrapping="Wrap" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Classes="flat" Width="24" Height="24" Padding="0" VerticalAlignment="Top"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                    ToolTip.Tip="Close" Command="{Binding CloseItemCommand}">
+                                <TextBlock Text="✕" FontSize="12" />
+                            </Button>
+                        </Grid>
 
-                    <Border Width="112" Height="112" CornerRadius="6" Background="#20FFFFFF" HorizontalAlignment="Center">
-                        <Image Source="{Binding SelectedItem.Sprite}" Stretch="Uniform" Margin="6" />
-                    </Border>
+                        <Border Width="96" Height="96" CornerRadius="6" Background="#20FFFFFF" HorizontalAlignment="Center">
+                            <Image Source="{Binding SelectedItem.Sprite}" Stretch="Uniform" Margin="6" />
+                        </Border>
 
-                    <TextBlock FontSize="13" TextAlignment="Center" Text="{Binding SelectedItem.CardDetailText}"
-                               IsVisible="{Binding SelectedItem.HasCardDetailText, FallbackValue=False}" />
-                    <TextBlock FontSize="12" Foreground="#A0FFFFFF" TextAlignment="Center" Text="Passive power"
-                               IsVisible="{Binding SelectedItem.IsPassive, FallbackValue=False}" />
-                    <TextBlock FontSize="12" Foreground="#FF60D080" TextAlignment="Center" Text="{Binding SelectedItem.EquippedText}"
-                               IsVisible="{Binding SelectedItem.IsEquipped, FallbackValue=False}" />
+                        <TextBlock FontSize="13" TextAlignment="Center" Text="{Binding SelectedItem.CardDetailText}"
+                                   IsVisible="{Binding SelectedItem.HasCardDetailText, FallbackValue=False}" />
+                        <TextBlock FontSize="12" Foreground="#A0FFFFFF" TextAlignment="Center" Text="Passive power"
+                                   IsVisible="{Binding SelectedItem.IsPassive, FallbackValue=False}" />
+                        <TextBlock FontSize="12" Foreground="#FF60D080" TextAlignment="Center" Text="{Binding SelectedItem.EquippedText}"
+                                   IsVisible="{Binding SelectedItem.IsEquipped, FallbackValue=False}" />
 
-                    <Button Classes="flat action" Margin="0,4,0,0"
-                            IsEnabled="{Binding CanPressAction}"
-                            Content="{Binding ActionText}" Command="{Binding ToggleEquipCommand}" />
-                    <TextBlock FontSize="11" Foreground="#A0FFFFFF" TextAlignment="Center" TextWrapping="Wrap"
-                               Text="{Binding ActionHint}" IsVisible="{Binding HasActionHint}" />
-                </StackPanel>
+                        <!-- Attributes -->
+                        <Border Classes="card" Margin="0" IsVisible="{Binding SelectedItem.HasAttrs, FallbackValue=False}">
+                            <ItemsControl ItemsSource="{Binding SelectedItem.Attrs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="api:ItemAttr">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,1">
+                                            <TextBlock Classes="attrValue" Classes.negative="{Binding IsNegative}" Text="{Binding ValueText}" />
+                                            <TextBlock Classes="attrName" Text="{Binding DisplayName}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+
+                        <!-- Description -->
+                        <TextBlock FontSize="12" Foreground="#C8FFFFFF" TextWrapping="Wrap" Text="{Binding SelectedItem.Description}"
+                                   IsVisible="{Binding SelectedItem.HasDescription, FallbackValue=False}" />
+
+                        <Button Classes="flat action" Margin="0,4,0,0"
+                                IsEnabled="{Binding CanPressAction}"
+                                Content="{Binding ActionText}" Command="{Binding ToggleEquipCommand}" />
+                        <TextBlock FontSize="11" Foreground="#A0FFFFFF" TextAlignment="Center" TextWrapping="Wrap"
+                                   Text="{Binding ActionHint}" IsVisible="{Binding HasActionHint}" />
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
         </Border>
     </Panel>

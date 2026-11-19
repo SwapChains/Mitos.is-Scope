@@ -87,10 +87,14 @@ public partial class App : Application
     /// </summary>
     private sealed record Popups(ShopViewModel Shop, InventoryViewModel Inventory, GemTrainingViewModel GemTraining);
 
-    private static Popups CreatePopups(TrackerViewModel tracker, AppSettings settings) => new(
-        Shop: new ShopViewModel(tracker),
-        Inventory: new InventoryViewModel(tracker, settings),
-        GemTraining: new GemTrainingViewModel(tracker));
+    private static Popups CreatePopups(TrackerViewModel tracker, AppSettings settings)
+    {
+        var sets = new ItemSetStore(settings);
+        return new(
+            Shop: new ShopViewModel(tracker, settings, sets),
+            Inventory: new InventoryViewModel(tracker, settings, sets),
+            GemTraining: new GemTrainingViewModel(tracker));
+    }
 
     /// <summary>Register new panels here.</summary>
     private static PanelViewModel[] CreatePanels(TrackerViewModel tracker, Popups popups) =>

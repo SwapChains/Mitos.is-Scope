@@ -6,23 +6,42 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MitosScope.App.Services;
+using MitosScope.App.Settings;
 using MitosScope.Core.Api;
+using MitosScope.Core.Items;
 
 namespace MitosScope.App.ViewModels;
 
 /// <summary>
 /// The shop browser (API v3, needs the "shop" permission): a popup opened by the small Shop panel.
 /// First page: the categories; clicking one shows its items in the same window. Clicking an item
-/// shows its card in the middle of the window, with the Buy button (and how many packs, for
-/// consumables). Everything is loaded when shown, never polled. Use on the UI thread.
+/// shows its card in the middle of the window, with its attributes, description and the Buy button
+/// (and how many packs, for consumables). The search box filters the category shown, or looks in
+/// every category from the first page. The Build tool finds the 3 items (one per category, like the
+/// equipment slots) that give the most points in the attributes the player picks, counting the
+/// equipment already owned as free. Everything is loaded when shown, never polled. Use on the UI thread.
 /// </summary>
 public partial class ShopViewModel : PopupViewModel
 {
+    private readonly AppSettings _settings;
+    private readonly ItemSetStore _sets;
     private SessionViewModel? _session;
     private CancellationTokenSource? _loadCts;
 
-    public ShopViewModel(TrackerViewModel tracker)
+    /// <summary>Every category's items, loaded for the search and the build tool; dropped after a purchase.</summary>
+    private Dictionary<int, IReadOnlyList<ShopItemViewModel>>? _allItems;
+
+    /// <summary>The account's equipment from /v1/inventory, for the build tool (owned equipment isn't in the shop).</summary>
+    private IReadOnlyList<InventoryItem>? _owned;
+
+    /// <summary>The search is reading every category (more typing just waits for it).</summary>
+    private bool _searchLoading;
+
+    public ShopViewModel(TrackerViewModel tracker, AppSettings settings, ItemSetStore sets)
     {
+        _settings = settings;
+        _sets = sets;
         Tracker = tracker;
         tracker.PropertyChanged += OnTrackerChanged;
         Watch(tracker.Current);
@@ -32,21 +51,57 @@ public partial class ShopViewModel : PopupViewModel
 
     public override string Title => "Shop";
 
+    public override double Width => 820;
+    public override double Height => 580;
+
     [ObservableProperty] public partial IReadOnlyList<ShopCategory>? Categories { get; private set; }
 
-    /// <summary>Null = categories page; otherwise the items page of this category.</summary>
+    /// <summary>Null = categories page (or search / build); otherwise the items page of this category.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsCategoriesPage), nameof(IsItemsPage), nameof(TitleText))]
+    [NotifyPropertyChangedFor(nameof(IsCategoriesPage), nameof(IsItemsPage), nameof(IsSearchPage), nameof(TitleText),
+        nameof(SearchHint), nameof(ShowBack), nameof(ShowItemsList), nameof(ShownItems), nameof(NoResults))]
     public partial ShopCategory? SelectedCategory { get; private set; }
 
-    [ObservableProperty] public partial IReadOnlyList<ShopItemViewModel>? Items { get; private set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShownItems), nameof(NoResults))]
+    public partial IReadOnlyList<ShopItemViewModel>? Items { get; private set; }
 
     /// <summary>Coins from the last items answer (not cached by the server).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CoinsText), nameof(HasCoins))]
     public partial long? Coins { get; private set; }
 
-    [ObservableProperty] public partial bool IsLoading { get; private set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NoResults))]
+    public partial bool IsLoading { get; private set; }
+
+    /// <summary>"Loading the shop… 3/9" while every category is read (search, build tool).</summary>
+    [ObservableProperty] public partial string LoadingText { get; private set; } = "Loading…";
+
+    // ---- search ---------------------------------------------------------------------------------
+
+    /// <summary>Filters the category shown; on the first page it looks in every category.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCategoriesPage), nameof(IsSearchPage), nameof(HasSearch), nameof(TitleText),
+        nameof(ShowBack), nameof(ShowItemsList), nameof(ShownItems), nameof(NoResults))]
+    public partial string? SearchText { get; set; }
+
+    public bool HasSearch => !string.IsNullOrWhiteSpace(SearchText);
+
+    /// <summary>Results of the search in every category.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShownItems), nameof(NoResults))]
+    public partial IReadOnlyList<ShopItemViewModel>? SearchResults { get; private set; }
+
+    public string SearchHint => SelectedCategory is { } c ? $"Search in {c.Name}…" : "Search every category (name, attribute, description)…";
+
+    /// <summary>The tiles shown: the category's items (filtered) or the search results.</summary>
+    public IReadOnlyList<ShopItemViewModel>? ShownItems => IsItemsPage
+        ? HasSearch ? Items?.Where(i => i.Matches(SearchText)).ToList() : Items
+        : IsSearchPage ? SearchResults : null;
+
+    public bool ShowItemsList => IsItemsPage || IsSearchPage;
+    public bool NoResults => ShowItemsList && !IsLoading && HasSearch && ShownItems is { Count: 0 };
 
     // ---- item card (buying) ---------------------------------------------------------------------
 
@@ -107,12 +162,17 @@ public partial class ShopViewModel : PopupViewModel
     [NotifyPropertyChangedFor(nameof(HasError))]
     public partial string? ErrorText { get; private set; }
 
-    public bool IsCategoriesPage => SelectedCategory is null;
-    public bool IsItemsPage => SelectedCategory is not null;
+    public bool IsCategoriesPage => SelectedCategory is null && !IsBuildPage && !HasSearch;
+    public bool IsItemsPage => SelectedCategory is not null && !IsBuildPage;
+    public bool IsSearchPage => SelectedCategory is null && !IsBuildPage && HasSearch;
+    public bool ShowBack => SelectedCategory is not null || IsBuildPage;
     public bool HasError => ErrorText is not null;
     public bool HasCoins => Coins is not null;
     public string CoinsText => Coins is { } c ? $"{c:N0} coins" : "";
-    public string TitleText => SelectedCategory?.Name is { Length: > 0 } n ? n : "Shop";
+
+    public string TitleText => IsBuildPage ? "Build tool"
+        : SelectedCategory?.Name is { Length: > 0 } n ? n
+        : HasSearch ? "Search" : "Shop";
 
     /// <summary>Second line of the small Shop panel.</summary>
     public string CardText => _session switch
@@ -125,12 +185,50 @@ public partial class ShopViewModel : PopupViewModel
 
     public bool CanBrowse => _session is { HasShopScope: true };
 
+    // ---- build tool -----------------------------------------------------------------------------
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCategoriesPage), nameof(IsItemsPage), nameof(IsSearchPage), nameof(ShowBack),
+        nameof(TitleText), nameof(ShowItemsList), nameof(ShownItems), nameof(NoResults))]
+    public partial bool IsBuildPage { get; private set; }
+
+    /// <summary>Every attribute found on equipment, to pick from.</summary>
+    [ObservableProperty] public partial IReadOnlyList<BuildAttrViewModel>? BuildAttrs { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasBuildResults), nameof(BuildHint))]
+    public partial IReadOnlyList<BuildResultViewModel>? BuildResults { get; private set; }
+
+    public bool HasBuildResults => BuildResults is { Count: > 0 };
+
+    /// <summary>Only items the player's level allows.</summary>
+    [ObservableProperty] public partial bool BuildMyLevel { get; set; }
+
+    /// <summary>The items to buy must cost, together, at most the player's coins.</summary>
+    [ObservableProperty] public partial bool BuildMyCoins { get; set; }
+
+    /// <summary>Count the equipment already owned (free).</summary>
+    [ObservableProperty] public partial bool BuildUseOwned { get; set; }
+
+    public string BuildHint => BuildAttrs is null ? ""
+        : !BuildAttrs.Any(a => a.IsSelected) ? "Pick one or more attributes: the tool finds the 3 items (one per category) that give the most points in them."
+        : HasBuildResults ? ""
+        : "No equipment gives these attributes with the options chosen.";
+
+    public bool HasBuildHint => BuildHint.Length > 0;
+
+    [ObservableProperty] public partial string? BuildStatus { get; private set; }
+
     // ---- commands -------------------------------------------------------------------------------
 
     protected override void OnOpened()
     {
         SelectedCategory = null;
         Items = null;
+        IsBuildPage = false;
+        SearchText = null;
+        _allItems = null;
+        _owned = null;
         OnPropertyChanged(nameof(CardText));
         _ = LoadCategoriesAsync();
     }
@@ -146,6 +244,7 @@ public partial class ShopViewModel : PopupViewModel
     [RelayCommand]
     private Task OpenCategory(ShopCategory category)
     {
+        SearchText = null;
         SelectedCategory = category;
         Items = null;
         return LoadItemsAsync(category);
@@ -158,11 +257,16 @@ public partial class ShopViewModel : PopupViewModel
         CancelLoad();
         IsLoading = false;
         ErrorText = null;
+        IsBuildPage = false;
         SelectedCategory = null;
         Items = null;
+        SearchText = null;
         if (Categories is null)
             _ = LoadCategoriesAsync();
     }
+
+    [RelayCommand]
+    private void ClearSearch() => SearchText = null;
 
     [RelayCommand]
     private void SelectItem(ShopItemViewModel item)
@@ -172,6 +276,13 @@ public partial class ShopViewModel : PopupViewModel
         BuyStatus = null;
         QuantityValue = 1;
         SelectedItem = item;
+    }
+
+    [RelayCommand]
+    private void SelectPick(BuildPickViewModel pick)
+    {
+        if (pick.ShopItem is { } item)
+            SelectItem(item);
     }
 
     [RelayCommand]
@@ -211,8 +322,18 @@ public partial class ShopViewModel : PopupViewModel
             : BuyErrorText(r.StatusCode, r.Error);
         if (ok && r.Value is { } bought)
             Coins = bought.Coins;
-        if (ok && SelectedCategory is { } category)
-            _ = LoadItemsAsync(category);
+        if (ok)
+        {
+            // owned / can_buy changed: the search and the build tool read the shop again
+            _allItems = null;
+            _owned = null;
+            if (SelectedCategory is { } category)
+                _ = LoadItemsAsync(category);
+            else if (IsBuildPage)
+                _ = LoadBuildAsync(keepCard: true);
+            else if (IsSearchPage)
+                _ = RunSearchAsync();
+        }
 
         var status = BuyStatus;
         await Task.Delay(BuyStatusTime);
@@ -234,10 +355,90 @@ public partial class ShopViewModel : PopupViewModel
     {
         OnPropertyChanged(nameof(CanPressBuy));
         OnPropertyChanged(nameof(BuyText));
+        if (BuildMyCoins)
+            UpdateBuild();
     }
 
     [RelayCommand]
-    private Task Retry() => SelectedCategory is { } c ? LoadItemsAsync(c) : LoadCategoriesAsync();
+    private Task Retry() => IsBuildPage ? LoadBuildAsync() : SelectedCategory is { } c ? LoadItemsAsync(c) : HasSearch ? RunSearchAsync() : LoadCategoriesAsync();
+
+    partial void OnSearchTextChanged(string? value)
+    {
+        if (IsSearchPage)
+            _ = RunSearchAsync();
+    }
+
+    [RelayCommand]
+    private Task OpenBuild()
+    {
+        CloseItem();
+        SearchText = null;
+        SelectedCategory = null;
+        Items = null;
+        IsBuildPage = true;
+        BuildMyLevel = _settings.BuildMyLevel;
+        BuildMyCoins = _settings.BuildMyCoins;
+        BuildUseOwned = _settings.BuildUseOwned;
+        return LoadBuildAsync();
+    }
+
+    partial void OnBuildMyLevelChanged(bool value) => BuildOptionChanged();
+    partial void OnBuildMyCoinsChanged(bool value) => BuildOptionChanged();
+    partial void OnBuildUseOwnedChanged(bool value) => BuildOptionChanged();
+
+    private void BuildOptionChanged()
+    {
+        if (!IsBuildPage)
+            return;
+        _settings.BuildMyLevel = BuildMyLevel;
+        _settings.BuildMyCoins = BuildMyCoins;
+        _settings.BuildUseOwned = BuildUseOwned;
+        SettingsStore.Save(_settings);
+        UpdateBuild();
+    }
+
+    [RelayCommand]
+    private void ToggleBuildAttr(BuildAttrViewModel attr)
+    {
+        attr.IsSelected = !attr.IsSelected;
+        _settings.BuildAttrs = BuildAttrs?.Where(a => a.IsSelected).Select(a => a.Name).ToList() ?? [];
+        SettingsStore.Save(_settings);
+        UpdateBuild();
+    }
+
+    [RelayCommand]
+    private void ClearBuildAttrs()
+    {
+        foreach (var a in BuildAttrs ?? [])
+            a.IsSelected = false;
+        _settings.BuildAttrs = [];
+        SettingsStore.Save(_settings);
+        UpdateBuild();
+    }
+
+    /// <summary>Saves a build as an item set of the inventory window (only owned items can be equipped from a set).</summary>
+    [RelayCommand]
+    private async Task SaveBuildAsSet(BuildResultViewModel build)
+    {
+        if (_session?.Account?.Id is not { } account)
+            return;
+        var name = string.Join(" + ", BuildAttrs?.Where(a => a.IsSelected).Select(a => a.Label) ?? []);
+        var set = _sets.Add(account, name, build.Picks.Select(p => new ItemSetEntry
+        {
+            Id = p.Item.Id,
+            Name = p.Item.Name,
+            Sprite = p.Item.Sprite,
+            Category = p.Item.Category,
+            Attrs = p.Item.Attrs.ToList(),
+        }));
+        var status = set is null ? $"You have {ItemSetStore.MaxSets} sets already"
+            : build.Picks.All(p => p.IsOwned) ? $"Saved as \"{set.Name}\" (Inventory › Item sets)"
+            : $"Saved as \"{set.Name}\": buy the missing items to equip it";
+        BuildStatus = status;
+        await Task.Delay(TimeSpan.FromSeconds(4));
+        if (BuildStatus == status)
+            BuildStatus = null;
+    }
 
     // ---- loading --------------------------------------------------------------------------------
 
@@ -281,6 +482,156 @@ public partial class ShopViewModel : PopupViewModel
             SelectedItem = Items.FirstOrDefault(i => i.Item.Id == selected.Item.Id);
     }
 
+    /// <summary>
+    /// Every category's items (one request each, kept until a purchase or the window closes). Null
+    /// when cancelled or failed (ErrorText says why). Leaves IsLoading on: the caller ends the load.
+    /// </summary>
+    private async Task<Dictionary<int, IReadOnlyList<ShopItemViewModel>>?> LoadAllItemsAsync(CancellationToken ct)
+    {
+        if (_allItems is { } cached)
+            return cached;
+        var session = _session!;
+        if (Categories is null)
+        {
+            var c = await session.Session.GetShopCategoriesAsync(ct);
+            if (ct.IsCancellationRequested)
+                return null;
+            if (!c.IsSuccess)
+            {
+                ErrorText = Describe(c.StatusCode, c.Error);
+                return null;
+            }
+            Categories = c.Value!.Categories;
+        }
+
+        var all = new Dictionary<int, IReadOnlyList<ShopItemViewModel>>();
+        var level = session.Account?.Level;
+        var n = 0;
+        foreach (var category in Categories)
+        {
+            LoadingText = $"Reading the shop… {++n}/{Categories.Count}";
+            var r = await session.Session.GetShopItemsAsync(category.Id, ct);
+            if (ct.IsCancellationRequested)
+                return null;
+            if (!r.IsSuccess)
+            {
+                // a category that fails (e.g. a seasonal one) doesn't stop the others
+                if (r.StatusCode is 0 or 403)
+                {
+                    ErrorText = Describe(r.StatusCode, r.Error);
+                    return null;
+                }
+                continue;
+            }
+            Coins = r.Value!.Coins;
+            all[category.Id] = r.Value.Items.Select(i => new ShopItemViewModel(i, r.Value.Coins, level, category.Name)).ToList();
+        }
+        LoadingText = "Loading…";
+        _allItems = all;
+        return all;
+    }
+
+    private async Task RunSearchAsync()
+    {
+        if (_allItems is { } cached)
+        {
+            ShowSearch(cached);
+            return;
+        }
+        if (_searchLoading)
+            return; // the load running shows the results of the latest text when it ends
+        if (BeginLoad() is not { } ct)
+            return;
+        _searchLoading = true;
+        var all = await LoadAllItemsAsync(ct);
+        if (ct.IsCancellationRequested)
+            return;
+        _searchLoading = false;
+        IsLoading = false;
+        LoadingText = "Loading…";
+        if (all is not null)
+            ShowSearch(all);
+    }
+
+    private void ShowSearch(Dictionary<int, IReadOnlyList<ShopItemViewModel>> all)
+    {
+        SearchResults = HasSearch
+            ? all.Values.SelectMany(i => i).Where(i => i.Matches(SearchText)).DistinctBy(i => i.Item.Id).Take(200).ToList()
+            : null;
+    }
+
+    private async Task LoadBuildAsync(bool keepCard = false)
+    {
+        if (BeginLoad() is not { } ct)
+            return;
+        var session = _session!;
+        var all = await LoadAllItemsAsync(ct);
+        if (ct.IsCancellationRequested)
+            return;
+        if (all is null)
+        {
+            IsLoading = false;
+            return;
+        }
+
+        if (_owned is null)
+        {
+            LoadingText = "Reading your inventory…";
+            var inv = await session.Session.GetInventoryAsync(ct);
+            if (ct.IsCancellationRequested)
+                return;
+            _owned = inv.IsSuccess ? inv.Value!.Data : [];
+        }
+        IsLoading = false;
+        LoadingText = "Loading…";
+
+        var wanted = _settings.BuildAttrs.ToHashSet();
+        BuildAttrs = Candidates(all, _owned, useOwned: true)
+            .SelectMany(c => c.Attrs)
+            .GroupBy(a => a.Name)
+            .Select(g => new BuildAttrViewModel(g.Key, g.First().DisplayName, wanted.Contains(g.Key)))
+            .OrderBy(a => a.Label, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        UpdateBuild();
+
+        if (keepCard && SelectedItem is { } selected)
+            SelectedItem = all.Values.SelectMany(i => i).FirstOrDefault(i => i.Item.Id == selected.Item.Id) ?? selected;
+    }
+
+    /// <summary>Equipment for slots 0-2 with attributes: shop items and, if asked, the owned ones.</summary>
+    private static IEnumerable<BuildCandidate> Candidates(Dictionary<int, IReadOnlyList<ShopItemViewModel>> all, IReadOnlyList<InventoryItem>? owned, bool useOwned)
+    {
+        var shop = all.Values.SelectMany(i => i)
+            .Where(i => IsSlotEquipment(i.Item.Type, i.Item.Category, i.Item.Passive) && i.Item.Attrs.Count > 0)
+            .Where(i => useOwned || !i.Item.Owned)
+            .Select(i => new BuildCandidate(i.Item.Id, i.Name, i.Item.Sprite, i.Item.Category, i.Item.Price, i.Item.Level, i.Item.Owned, i.Item.Attrs));
+        if (!useOwned || owned is null)
+            return shop;
+        var mine = owned
+            .Where(i => IsSlotEquipment(i.Type, i.Category, i.Passive) && i.Attrs.Count > 0)
+            .Select(i => new BuildCandidate(i.Id, EquippedItemViewModel.CleanName(i.Name), i.Sprite, i.Category, 0, i.Level, true, i.Attrs));
+        return shop.Concat(mine);
+    }
+
+    /// <summary>What goes in the equipment slots 0-2: not potions, passive powers or gems (slot 5).</summary>
+    internal static bool IsSlotEquipment(string? type, int category, bool passive) =>
+        string.Equals(type, "equipment", StringComparison.OrdinalIgnoreCase) && !passive && category != 10;
+
+    private void UpdateBuild()
+    {
+        if (!IsBuildPage || _allItems is not { } all || BuildAttrs is null)
+            return;
+        var wanted = BuildAttrs.Where(a => a.IsSelected).Select(a => a.Name).ToHashSet();
+        var shopById = all.Values.SelectMany(i => i).GroupBy(i => i.Item.Id).ToDictionary(g => g.Key, g => g.First());
+        var results = BuildOptimizer.Find(Candidates(all, _owned, BuildUseOwned), wanted, new BuildOptions
+        {
+            MaxLevel = BuildMyLevel ? _session?.Account?.Level : null,
+            Budget = BuildMyCoins ? Coins : null,
+        });
+        BuildResults = results.Select((r, i) => new BuildResultViewModel(i + 1, r, wanted, shopById)).ToList();
+        OnPropertyChanged(nameof(HasBuildHint));
+    }
+
     /// <summary>Cancels the previous load; returns null (and shows why) when there's nothing to load from.</summary>
     private CancellationToken? BeginLoad()
     {
@@ -301,9 +652,11 @@ public partial class ShopViewModel : PopupViewModel
 
     private void CancelLoad()
     {
+        _searchLoading = false;
         _loadCts?.Cancel();
         _loadCts?.Dispose();
         _loadCts = null;
+        LoadingText = "Loading…";
     }
 
     private static string Describe(int status, string? error) => (status, error) switch
@@ -337,6 +690,10 @@ public partial class ShopViewModel : PopupViewModel
         Categories = null;
         Coins = null;
         IsBuying = false;
+        _allItems = null;
+        _owned = null;
+        BuildAttrs = null;
+        BuildResults = null;
         if (IsOpen)
             Back();
         NotifyAccess();
@@ -348,7 +705,7 @@ public partial class ShopViewModel : PopupViewModel
         {
             NotifyAccess();
             // Permission just granted while the window shows the "not granted" message.
-            if (IsOpen && CanBrowse && Categories is null && !IsLoading && SelectedCategory is null)
+            if (IsOpen && CanBrowse && Categories is null && !IsLoading && SelectedCategory is null && !IsBuildPage)
                 _ = LoadCategoriesAsync();
         }
     }

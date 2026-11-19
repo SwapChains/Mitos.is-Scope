@@ -1,0 +1,107 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Shared by the shop and the inventory windows: search box, attribute lines, chips, set rows. -->
+    <Style Selector="TextBox.search">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Padding" Value="8,5" />
+        <Setter Property="MinHeight" Value="30" />
+        <Setter Property="Background" Value="#20FFFFFF" />
+        <Setter Property="BorderBrush" Value="#30FFFFFF" />
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="TextBox.search:focus /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="#28FFFFFF" />
+        <Setter Property="BorderBrush" Value="#8060B0FF" />
+    </Style>
+
+    <!-- "+12 Speed": green value, red when negative; the picked attributes of a build in gold. -->
+    <Style Selector="TextBlock.attrValue">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="#FF8CE06A" />
+        <Setter Property="MinWidth" Value="38" />
+    </Style>
+    <Style Selector="TextBlock.attrValue.negative">
+        <Setter Property="Foreground" Value="#FFFF7070" />
+    </Style>
+    <Style Selector="TextBlock.attrValue.wanted">
+        <Setter Property="Foreground" Value="#FFFFD060" />
+    </Style>
+    <Style Selector="TextBlock.attrName">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="#D0FFFFFF" />
+    </Style>
+    <Style Selector="TextBlock.tileAttrs">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Foreground" Value="#FF8CE06A" />
+        <Setter Property="TextAlignment" Value="Center" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="MaxLines" Value="2" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="TextBlock.section">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="#90FFFFFF" />
+    </Style>
+
+    <!-- Attribute chips of the build tool. -->
+    <Style Selector="ToggleButton.chip">
+        <Setter Property="Margin" Value="0,0,6,6" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Background" Value="#20FFFFFF" />
+        <Setter Property="Foreground" Value="#E0FFFFFF" />
+        <Setter Property="BorderBrush" Value="#30FFFFFF" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="ToggleButton.chip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#38FFFFFF" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="ToggleButton.chip:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#A0C09020" />
+        <Setter Property="BorderBrush" Value="#FFFFD060" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="#18FFFFFF" />
+        <Setter Property="BorderBrush" Value="#30FFFFFF" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+    <Style Selector="Border.card.best">
+        <Setter Property="BorderBrush" Value="#C0FFD060" />
+        <Setter Property="Background" Value="#20FFD060" />
+    </Style>
+    <Style Selector="Border.card.active">
+        <Setter Property="BorderBrush" Value="#C040C060" />
+        <Setter Property="Background" Value="#2040C060" />
+    </Style>
+
+    <Style Selector="Button.accent">
+        <Setter Property="Background" Value="#5040C060" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#8040C060" />
+    </Style>
+    <Style Selector="Button.accent:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#A040C060" />
+    </Style>
+    <Style Selector="Button.small">
+        <Setter Property="Padding" Value="8,3" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="CheckBox.option">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Margin" Value="0,0,14,0" />
+    </Style>
+</Styles>

@@ -21,6 +21,15 @@ public sealed class AppSettings
 
     /// <summary>Game executable of the last client seen (from its window), used by tray "Open Instance".</summary>
     public string? GamePath { get; set; }
+
+    /// <summary>Item sets made in the inventory window, per account id (they live only here, not on the game server).</summary>
+    public Dictionary<string, List<MitosScope.Core.Items.ItemSet>> ItemSets { get; set; } = [];
+
+    /// <summary>Shop build tool: the attributes the player picked last time, and its options.</summary>
+    public List<string> BuildAttrs { get; set; } = [];
+    public bool BuildMyLevel { get; set; } = true;
+    public bool BuildMyCoins { get; set; }
+    public bool BuildUseOwned { get; set; } = true;
 }
 
 public sealed class PanelLayout

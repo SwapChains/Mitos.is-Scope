@@ -16,6 +16,9 @@ Created by **Chains** ([SwapChains](https://github.com/SwapChains)).
 - **Follows the game window**: in windowed mode the panels move with the game window when you drag it, and never leave the screen.
 - **Click-through**: once the layout is locked, your clicks go straight to the game.
 - **Quick launch**: start a new game instance on any slot (1-20) from the tray, and optionally start MitosScope with Windows.
+- **Item attributes**: shop and inventory show what every item gives (speed, resilience…) and its description, and you can search items by name, attribute or description.
+- **Build tool**: pick the attributes you want and the shop finds the best 3 items to equip (one per category, like the game's slots), counting what you already own as free. It can stay within your level and your coins.
+- **Item sets**: in the inventory, save named sets of up to 3 items and swap to one in a click. Each set shows what it gives in total. Sets are kept on your PC for each account.
 
 ## Panels
 
@@ -28,8 +31,8 @@ Created by **Chains** ([SwapChains](https://github.com/SwapChains)).
 | **Battle Pass** | Tier and expiry (premium only), type, current level and XP, next level | Every 60 s |
 | **Equipment** | Equipped items with durability; repair one or all with coins, click an icon to unequip | Every 15 s and on death |
 | **All Time Stats** | Time played, max score, kills, splits, ranked wins / losses | Every 60 s |
-| **Shop** | Click to open the shop window: categories, items with price, buy (several packs at once for consumables) | When opened |
-| **Inventory** | Click to open the inventory window: every owned item by category, equip / unequip (not while alive in a match) | When opened |
+| **Shop** | Click to open the shop window: categories, items with attributes, description and price, search in every category, buy (several packs at once for consumables), and the **Build tool** | When opened |
+| **Inventory** | Click to open the inventory window: every owned item by category with its attributes, search, equip / unequip, and the **Item sets** tab (create, rename, edit, reorder, delete, equip in one click). Equipment can't change while alive in a match. | When opened |
 | **Gem Training** | The 3 training slots (gem, level, Gem EXP, time to next level) and the bonus; click to open the window: put gems in slots or remove them | Every 15 s |
 
 ## Requirements
@@ -79,7 +82,7 @@ Right-click the tray icon (a left-click toggles edit mode):
 
 ### Settings
 
-The layout and panel options are saved in `%APPDATA%\MitosScope\settings.json`, along with `gamePath`, the game executable used by **Open Instance**. You can also set `gameProcessNames` there, the executable names of the game client (default `Mitosis`), which MitosScope watches to detect when the game starts.
+The layout and panel options are saved in `%APPDATA%\MitosScope\settings.json`, along with your item sets (`itemSets`, per account), the build tool choices and `gamePath`, the game executable used by **Open Instance**. You can also set `gameProcessNames` there, the executable names of the game client (default `Mitosis`), which MitosScope watches to detect when the game starts.
 
 ## Troubleshooting
 
@@ -99,6 +102,7 @@ src/
 ├── MitosScope.Core/          Game API client and session logic (no UI)
 │   ├── Api/                  HTTP client and response models for the addon API
 │   ├── Discovery/            Finding running game clients and their API ports
+│   ├── Items/                Build tool (best items for chosen attributes), item sets, item search
 │   ├── Sessions/             One session per client: auth, polling, change events
 │   └── Stats/                Match tracking (peak mass, best position, last match)
 └── MitosScope.App/           Avalonia overlay app

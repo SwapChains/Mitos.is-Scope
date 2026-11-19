@@ -6,7 +6,7 @@
              x:DataType="vm:ShopViewModel">
     <UserControl.Styles>
         <Style Selector="Button.category">
-            <Setter Property="Width" Value="160" />
+            <Setter Property="Width" Value="170" />
             <Setter Property="Height" Value="48" />
             <Setter Property="Margin" Value="0,0,8,8" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -14,9 +14,14 @@
             <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
+        <Style Selector="Button.category.build">
+            <Setter Property="Background" Value="#40C09020" />
+            <Setter Property="BorderBrush" Value="#A0FFD060" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
         <!-- Item tiles: buttons that open the item card. -->
         <Style Selector="Button.item">
-            <Setter Property="Width" Value="160" />
+            <Setter Property="Width" Value="150" />
             <Setter Property="Margin" Value="0,0,8,8" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="CornerRadius" Value="6" />
@@ -54,14 +59,27 @@
         <Style Selector="Button.buy:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="#A040C060" />
         </Style>
+        <!-- Items of a build: a click on a shop item opens its Buy card. -->
+        <Style Selector="Button.pick">
+            <Setter Property="Width" Value="210" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="#14FFFFFF" />
+        </Style>
+        <Style Selector="Button.pick.owned">
+            <Setter Property="BorderBrush" Value="#8040C060" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
     </UserControl.Styles>
 
     <Panel>
         <DockPanel>
-            <!-- Header: back (items page), title, coins, close -->
-            <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" Margin="0,0,0,10">
-                <Button Classes="flat" Content="‹ Categories" Padding="8,3" FontSize="12"
-                        IsVisible="{Binding IsItemsPage}" Command="{Binding BackCommand}" />
+            <!-- Header: back, title, coins, close -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" Margin="0,0,0,8">
+                <Button Classes="flat" Content="‹ Shop" Padding="8,3" FontSize="12"
+                        IsVisible="{Binding ShowBack}" Command="{Binding BackCommand}" />
                 <TextBlock Grid.Column="1" Classes="title" FontSize="18" VerticalAlignment="Center"
                            Text="{Binding TitleText}" TextTrimming="CharacterEllipsis" />
                 <TextBlock Grid.Column="2" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFD060" VerticalAlignment="Center"
@@ -73,9 +91,17 @@
                 </Button>
             </Grid>
 
+            <!-- Search: the category shown, or every category from the first page -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,0,0,10"
+                  IsVisible="{Binding !IsBuildPage}">
+                <TextBox Classes="search" Watermark="{Binding SearchHint}" Text="{Binding SearchText}" />
+                <Button Grid.Column="1" Classes="flat small" Content="Clear" IsVisible="{Binding HasSearch}"
+                        Command="{Binding ClearSearchCommand}" />
+            </Grid>
+
             <!-- Loading / error -->
             <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8" IsVisible="{Binding IsLoading}">
-                <TextBlock Classes="muted" Text="Loading…" />
+                <TextBlock Classes="muted" Text="{Binding LoadingText}" />
                 <ProgressBar IsIndeterminate="True" />
             </StackPanel>
             <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8" IsVisible="{Binding HasError}">
@@ -83,31 +109,43 @@
                 <Button Classes="flat" Content="Try again" Padding="10,3" FontSize="12"
                         IsVisible="{Binding CanBrowse}" Command="{Binding RetryCommand}" />
             </StackPanel>
+            <TextBlock DockPanel.Dock="Top" Classes="muted" Text="No items match the search." IsVisible="{Binding NoResults}" />
 
             <Panel>
-                <!-- Page 1: categories -->
+                <!-- Page 1: build tool and categories -->
                 <ScrollViewer IsVisible="{Binding IsCategoriesPage}" VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding Categories}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="api:ShopCategory">
-                                <Button Classes="flat category"
-                                        Command="{Binding $parent[UserControl].((vm:ShopViewModel)DataContext).OpenCategoryCommand}"
-                                        CommandParameter="{Binding}">
-                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                </Button>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <StackPanel>
+                        <Button Classes="flat category build" Width="NaN" HorizontalAlignment="Stretch" Height="54"
+                                HorizontalContentAlignment="Left" Padding="14,6" Margin="0,0,8,12"
+                                IsEnabled="{Binding CanBrowse}" Command="{Binding OpenBuildCommand}">
+                            <StackPanel Spacing="1">
+                                <TextBlock Text="⚡ Build tool" FontSize="14" FontWeight="Bold" Foreground="#FFFFD060" />
+                                <TextBlock Text="Pick the attributes you want (speed, resilience…): it finds the best 3 items to equip"
+                                           FontSize="11" FontWeight="Normal" Foreground="#C0FFFFFF" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Button>
+                        <ItemsControl ItemsSource="{Binding Categories}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="api:ShopCategory">
+                                    <Button Classes="flat category"
+                                            Command="{Binding $parent[UserControl].((vm:ShopViewModel)DataContext).OpenCategoryCommand}"
+                                            CommandParameter="{Binding}">
+                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </ScrollViewer>
 
-                <!-- Page 2: items of the selected category; a click opens the item card -->
-                <ScrollViewer IsVisible="{Binding IsItemsPage}" VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding Items}">
+                <!-- Page 2: items of the selected category, or search results; a click opens the item card -->
+                <ScrollViewer IsVisible="{Binding ShowItemsList}" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding ShownItems}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <WrapPanel />
@@ -121,11 +159,14 @@
                                     <Border Classes="itemFrame" Padding="8" CornerRadius="6"
                                             BorderBrush="#30FFFFFF" BorderThickness="1">
                                         <StackPanel Spacing="3">
-                                            <Border Width="56" Height="56" CornerRadius="4" Background="#20FFFFFF" HorizontalAlignment="Center">
+                                            <Border Width="52" Height="52" CornerRadius="4" Background="#20FFFFFF" HorizontalAlignment="Center">
                                                 <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="3" />
                                             </Border>
                                             <TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Name}"
                                                        TextAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock FontSize="10" Foreground="#90FFFFFF" Text="{Binding CategoryName}"
+                                                       TextAlignment="Center" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasCategoryName}" />
+                                            <TextBlock Classes="tileAttrs" Text="{Binding AttrsShortText}" IsVisible="{Binding HasAttrs}" />
                                             <TextBlock FontSize="12" Foreground="#FFFFD060" Text="{Binding PriceText}" TextAlignment="Center" />
                                             <TextBlock FontSize="11" Foreground="#A0FFFFFF" Text="{Binding StateText}"
                                                        TextAlignment="Center" IsVisible="{Binding HasStateText}" />
@@ -136,51 +177,184 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
+
+                <!-- Build tool: attributes to pick, options, best builds -->
+                <DockPanel IsVisible="{Binding IsBuildPage}">
+                    <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Classes="section" Text="ATTRIBUTES TO MAXIMIZE" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Classes="flat small" Content="Clear" Command="{Binding ClearBuildAttrsCommand}" />
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding BuildAttrs}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BuildAttrViewModel">
+                                    <ToggleButton Classes="chip" Content="{Binding Label}" IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                  Command="{Binding $parent[UserControl].((vm:ShopViewModel)DataContext).ToggleBuildAttrCommand}"
+                                                  CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <WrapPanel>
+                            <CheckBox Classes="option" Content="Only items my level allows" IsChecked="{Binding BuildMyLevel}" />
+                            <CheckBox Classes="option" Content="Count the equipment I own (free)" IsChecked="{Binding BuildUseOwned}" />
+                            <CheckBox Classes="option" Content="Within my coins" IsChecked="{Binding BuildMyCoins}" />
+                        </WrapPanel>
+                        <TextBlock Classes="muted" Text="{Binding BuildHint}" IsVisible="{Binding HasBuildHint}" />
+                        <TextBlock FontSize="12" Foreground="#FF8CE06A" Text="{Binding BuildStatus}"
+                                   IsVisible="{Binding BuildStatus, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    </StackPanel>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding BuildResults}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BuildResultViewModel">
+                                    <Border Classes="card" Classes.best="{Binding IsBest}" Margin="0,0,14,8">
+                                        <StackPanel Spacing="6">
+                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
+                                                <TextBlock Text="{Binding RankText}" FontSize="15" FontWeight="Bold" Foreground="#FFFFD060" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding ScoreText}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding CostText}" FontSize="12" Foreground="#FFFFD060" VerticalAlignment="Center" />
+                                                <Button Grid.Column="3" Classes="flat small" Content="Save as set"
+                                                        ToolTip.Tip="Keep this build as an item set (Inventory › Item sets) to equip it in one click"
+                                                        Command="{Binding $parent[UserControl].((vm:ShopViewModel)DataContext).SaveBuildAsSetCommand}"
+                                                        CommandParameter="{Binding}" />
+                                            </Grid>
+                                            <ItemsControl ItemsSource="{Binding Picks}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:BuildPickViewModel">
+                                                        <Button Classes="flat pick" Classes.owned="{Binding IsOwned}" ToolTip.Tip="{Binding Tip}"
+                                                                Command="{Binding $parent[UserControl].((vm:ShopViewModel)DataContext).SelectPickCommand}"
+                                                                CommandParameter="{Binding}">
+                                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                                <Border Width="40" Height="40" CornerRadius="4" Background="#20FFFFFF">
+                                                                    <Image Source="{Binding Sprite}" Stretch="Uniform" Margin="2" />
+                                                                </Border>
+                                                                <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                                                    <TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock FontSize="10" Foreground="#FF8CE06A" Text="{Binding AttrsText}" TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock FontSize="11" Foreground="#FFFFD060" Text="{Binding PriceText}" />
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <!-- Totals: the picked attributes first (gold), then the others -->
+                                            <ItemsControl ItemsSource="{Binding Wanted}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:AttrLineViewModel">
+                                                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,14,0">
+                                                            <TextBlock Classes="attrValue wanted" MinWidth="0" FontSize="13" Text="{Binding ValueText}" />
+                                                            <TextBlock Classes="attrName" FontSize="13" FontWeight="SemiBold" Text="{Binding Name}" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <ItemsControl ItemsSource="{Binding Others}" IsVisible="{Binding HasOthers}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:AttrLineViewModel">
+                                                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,0">
+                                                            <TextBlock Classes="attrValue" Classes.negative="{Binding IsNegative}" MinWidth="0" FontSize="11" Text="{Binding ValueText}" />
+                                                            <TextBlock Classes="attrName" FontSize="11" Text="{Binding Name}" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
             </Panel>
         </DockPanel>
 
         <!-- Card of the clicked item, centered over the list. A click outside it closes it. -->
         <Border Background="#B0000000" CornerRadius="6" Margin="-14,-10"
                 IsVisible="{Binding HasSelectedItem}" PointerPressed="OnBackdropPressed">
-            <Border Width="300" HorizontalAlignment="Center" VerticalAlignment="Center"
+            <Border Width="340" MaxHeight="540" HorizontalAlignment="Center" VerticalAlignment="Center"
                     Padding="16,14" CornerRadius="8" Background="#FF181E24" BorderBrush="#40FFFFFF" BorderThickness="1">
-                <StackPanel Spacing="8">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding SelectedItem.Name}"
-                                   TextWrapping="Wrap" VerticalAlignment="Center" />
-                        <Button Grid.Column="1" Classes="flat" Width="24" Height="24" Padding="0" VerticalAlignment="Top"
-                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                ToolTip.Tip="Close" Command="{Binding CloseItemCommand}">
-                            <TextBlock Text="✕" FontSize="12" />
-                        </Button>
-                    </Grid>
-
-                    <Border Width="112" Height="112" CornerRadius="6" Background="#20FFFFFF" HorizontalAlignment="Center">
-                        <Image Source="{Binding SelectedItem.Sprite}" Stretch="Uniform" Margin="6" />
-                    </Border>
-
-                    <TextBlock FontSize="13" Foreground="#FFFFD060" Text="{Binding SelectedItem.PriceText}" TextAlignment="Center" />
-                    <TextBlock FontSize="12" Foreground="#A0FFFFFF" Text="{Binding SelectedItem.NotBuyableText}" TextAlignment="Center"
-                               IsVisible="{Binding !SelectedItem.IsBuyable}" />
-
-                    <!-- Consumables: how many packs (1-30); the price on the button follows. -->
-                    <StackPanel Spacing="4" IsVisible="{Binding ShowQuantity}">
-                        <TextBlock FontSize="13" TextAlignment="Center" Text="{Binding PacksText}" />
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                            <Button Classes="flat qty" Content="−" CommandParameter="-1"
-                                    Command="{Binding ChangeQuantityCommand}" IsEnabled="{Binding !IsBuying}" />
-                            <Slider Grid.Column="1" Minimum="1" Maximum="30" TickFrequency="1" IsSnapToTickEnabled="True"
-                                    VerticalAlignment="Center" IsEnabled="{Binding !IsBuying}"
-                                    Value="{Binding QuantityValue}" />
-                            <Button Grid.Column="2" Classes="flat qty" Content="+" CommandParameter="1"
-                                    Command="{Binding ChangeQuantityCommand}" IsEnabled="{Binding !IsBuying}" />
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding SelectedItem.Name}"
+                                       TextWrapping="Wrap" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Classes="flat" Width="24" Height="24" Padding="0" VerticalAlignment="Top"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                    ToolTip.Tip="Close" Command="{Binding CloseItemCommand}">
+                                <TextBlock Text="✕" FontSize="12" />
+                            </Button>
                         </Grid>
-                    </StackPanel>
 
-                    <Button Classes="flat buy" Margin="0,4,0,0"
-                            IsVisible="{Binding ShowBuy}" IsEnabled="{Binding CanPressBuy}"
-                            Content="{Binding BuyText}" Command="{Binding BuyCommand}" />
-                </StackPanel>
+                        <Border Width="96" Height="96" CornerRadius="6" Background="#20FFFFFF" HorizontalAlignment="Center">
+                            <Image Source="{Binding SelectedItem.Sprite}" Stretch="Uniform" Margin="6" />
+                        </Border>
+
+                        <TextBlock FontSize="11" Foreground="#A0FFFFFF" TextAlignment="Center" Text="{Binding SelectedItem.LevelText}"
+                                   IsVisible="{Binding SelectedItem.HasLevelText, FallbackValue=False}" />
+
+                        <!-- Attributes -->
+                        <Border Classes="card" Margin="0" IsVisible="{Binding SelectedItem.HasAttrs, FallbackValue=False}">
+                            <ItemsControl ItemsSource="{Binding SelectedItem.Attrs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="api:ItemAttr">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,1">
+                                            <TextBlock Classes="attrValue" Classes.negative="{Binding IsNegative}" Text="{Binding ValueText}" />
+                                            <TextBlock Classes="attrName" Text="{Binding DisplayName}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+
+                        <!-- Description -->
+                        <TextBlock FontSize="12" Foreground="#C8FFFFFF" TextWrapping="Wrap" Text="{Binding SelectedItem.Description}"
+                                   IsVisible="{Binding SelectedItem.HasDescription, FallbackValue=False}" />
+
+                        <TextBlock FontSize="13" Foreground="#FFFFD060" Text="{Binding SelectedItem.PriceText}" TextAlignment="Center" />
+                        <TextBlock FontSize="12" Foreground="#A0FFFFFF" Text="{Binding SelectedItem.NotBuyableText}" TextAlignment="Center"
+                                   IsVisible="{Binding !SelectedItem.IsBuyable}" />
+
+                        <!-- Consumables: how many packs (1-30); the price on the button follows. -->
+                        <StackPanel Spacing="4" IsVisible="{Binding ShowQuantity}">
+                            <TextBlock FontSize="13" TextAlignment="Center" Text="{Binding PacksText}" />
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                <Button Classes="flat qty" Content="−" CommandParameter="-1"
+                                        Command="{Binding ChangeQuantityCommand}" IsEnabled="{Binding !IsBuying}" />
+                                <Slider Grid.Column="1" Minimum="1" Maximum="30" TickFrequency="1" IsSnapToTickEnabled="True"
+                                        VerticalAlignment="Center" IsEnabled="{Binding !IsBuying}"
+                                        Value="{Binding QuantityValue}" />
+                                <Button Grid.Column="2" Classes="flat qty" Content="+" CommandParameter="1"
+                                        Command="{Binding ChangeQuantityCommand}" IsEnabled="{Binding !IsBuying}" />
+                            </Grid>
+                        </StackPanel>
+
+                        <Button Classes="flat buy" Margin="0,4,0,0"
+                                IsVisible="{Binding ShowBuy}" IsEnabled="{Binding CanPressBuy}"
+                                Content="{Binding BuyText}" Command="{Binding BuyCommand}" />
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
         </Border>
     </Panel>

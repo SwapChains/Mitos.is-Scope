@@ -74,11 +74,34 @@ public sealed record AccountInfo
     public Guild? Guild { get; init; }
 }
 
+/// <summary>
+/// One attribute of an item ("attrs" in shop, inventory and equipment): the game's id (e.g. "speed"),
+/// its name in the player's language and the points it gives (negative = it takes them away).
+/// </summary>
+public sealed record ItemAttr
+{
+    public string Name { get; init; } = "";
+    public string? Label { get; init; }
+    public double Value { get; init; }
+
+    [JsonIgnore]
+    public string DisplayName => string.IsNullOrWhiteSpace(Label) ? Name.Replace('_', ' ') : Label!;
+
+    /// <summary>"+12", "-5", "+2.5".</summary>
+    [JsonIgnore]
+    public string ValueText => (Value >= 0 ? "+" : "") + Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    [JsonIgnore]
+    public bool IsNegative => Value < 0;
+}
+
 /// <summary>/v1/inventory: one owned item. Read on demand by the inventory window (cached ~60 s by the server).</summary>
 public sealed record InventoryItem
 {
     public long Id { get; init; }
     public string? Name { get; init; }
+    public string? Description { get; init; }
+    public IReadOnlyList<ItemAttr> Attrs { get; init; } = [];
     public string? Type { get; init; }
     public int Category { get; init; }
     public long Level { get; init; }
@@ -112,6 +135,7 @@ public sealed record EquipmentSlot
     public long MaxDurability { get; init; }
     /// <summary>Coins to repair it; 0 when it isn't damaged or can't be repaired.</summary>
     public long RepairPrice { get; init; }
+    public IReadOnlyList<ItemAttr> Attrs { get; init; } = [];
 }
 
 // ---- shop (API v3, needs the "shop" permission) ----
@@ -137,6 +161,7 @@ public sealed record ShopItem
     public long Price { get; init; }
     /// <summary>Uses one purchase gives (consumables).</summary>
     public long Pack { get; init; }
+    public IReadOnlyList<ItemAttr> Attrs { get; init; } = [];
     public bool Owned { get; init; }
     /// <summary>Has the level, the achievement and the coins, and doesn't own it yet.</summary>
     public bool CanBuy { get; init; }
