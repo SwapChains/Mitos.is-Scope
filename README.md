@@ -13,7 +13,9 @@ Created by **Chains** ([SwapChains](https://github.com/SwapChains)).
 - **Account data** (refreshed every 60 s): level, coins, rating, guild, quests, battle pass, equipment durability and all-time stats.
 - **Several accounts at once**: connects to up to 20 open clients, and the panels follow the game window you focus.
 - **Free layout**: each panel is its own window that you can move, resize, turn off, or set to show only in the menu or only during a match.
+- **Follows the game window**: in windowed mode the panels move with the game window when you drag it, and never leave the screen.
 - **Click-through**: once the layout is locked, your clicks go straight to the game.
+- **Quick launch**: start a new game instance on any slot (1-20) from the tray, and optionally start MitosScope with Windows.
 
 ## Panels
 
@@ -58,7 +60,7 @@ Created by **Chains** ([SwapChains](https://github.com/SwapChains)).
 2. Open Mitos.is and log in. When the game asks whether to allow **MitosScope**, click **Allow**. The popup only appears in the menu, never during a match.
 3. On the first launch the panels open in **edit mode**: drag and resize them, then press **Ctrl+Shift+E** to lock the layout.
 
-The overlay is visible only while a game window is focused. **Ctrl+Shift+E** toggles edit mode from anywhere, even while the game has focus.
+The overlay is visible only while a game window is focused. In windowed mode, dragging the game window moves the panels with it (except in edit mode). **Ctrl+Shift+E** toggles edit mode from anywhere, even while the game has focus.
 
 ### Tray menu
 
@@ -70,12 +72,14 @@ Right-click the tray icon (a left-click toggles edit mode):
   - **Enabled**: turns the panel on or off.
   - **Show in menu** / **Show in match**: show the panel only in the menu (including while dead), only during a match, or both.
   - In edit mode every enabled panel is shown, so you can arrange them all.
+- **Open Instance**: slots 1-20; each one starts the game with `-slot0` to `-slot19`. The game's location is learned from the last client you logged in with, so open the game normally once first.
+- **Start with Windows**: starts MitosScope when you sign in to Windows.
 - **Open settings folder**: opens `%APPDATA%\MitosScope`.
 - **Exit**
 
 ### Settings
 
-The layout and panel options are saved in `%APPDATA%\MitosScope\settings.json`. You can also set `gameProcessNames` there, the executable names of the game client (default `Mitosis`), which MitosScope watches to detect when the game starts.
+The layout and panel options are saved in `%APPDATA%\MitosScope\settings.json`, along with `gamePath`, the game executable used by **Open Instance**. You can also set `gameProcessNames` there, the executable names of the game client (default `Mitosis`), which MitosScope watches to detect when the game starts.
 
 ## Troubleshooting
 
@@ -99,7 +103,7 @@ src/
 │   └── Stats/                Match tracking (peak mass, best position, last match)
 └── MitosScope.App/           Avalonia overlay app
     ├── Overlay/              Panel windows, visibility rules, focus and match state
-    ├── Services/             Hotkeys, foreground watcher, app key, item sprites
+    ├── Services/             Hotkeys, foreground/game window watchers, game launcher, startup, app key, item sprites
     ├── Settings/             settings.json model and storage
     ├── ViewModels/           Session and panel view models
     └── Views/Panels/         One view per panel
