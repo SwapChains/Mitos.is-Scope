@@ -27,7 +27,7 @@ public sealed partial class InventoryItemViewModel(InventoryItem item) : Observa
 
     public IReadOnlyList<ItemAttr> Attrs => Item.Attrs;
     public bool HasAttrs => Item.Attrs.Count > 0;
-    public string AttrsShortText => AttrText.Short(Item.Attrs);
+    public string AttrsShortText => AttrText.Tile(Item.Attrs);
     public string AttrsTip => $"{Name}\n{AttrText.Lines(Item.Attrs)}";
 
     public bool Matches(string? query) => ItemText.Matches(query, Name, Item.Description, Item.Attrs);
@@ -56,7 +56,7 @@ public sealed partial class InventoryItemViewModel(InventoryItem item) : Observa
     [NotifyPropertyChangedFor(nameof(EquippedText))]
     public partial int Slot { get; set; } = -1;
 
-    public string EquippedText => IsEquipped ? Slot >= 0 ? $"Equipped Â· slot {Slot}" : "Equipped" : "";
+    public string EquippedText => IsEquipped ? Slot >= 0 ? $"Equipped · slot {Slot}" : "Equipped" : "";
 
     /// <summary>The entry saved in an item set (name, icon and attributes copied, in case the item goes away).</summary>
     public ItemSetEntry ToSetEntry() => new()
@@ -100,8 +100,8 @@ public sealed partial class InventoryGroupViewModel(int category, string name, I
     [NotifyPropertyChangedFor(nameof(ArrowText), nameof(ToggleTip))]
     public partial bool IsExpanded { get; set; } = expanded;
 
-    /// <summary>â–² open (click to close), â–¼ closed (click to open).</summary>
-    public string ArrowText => IsExpanded ? "â–²" : "â–¼";
+    /// <summary>▲ open (click to close), ▼ closed (click to open).</summary>
+    public string ArrowText => IsExpanded ? "▲" : "▼";
     public string ToggleTip => IsExpanded ? "Hide this category" : "Show this category";
 
     /// <summary>The same category with only the items matching the search (always open).</summary>

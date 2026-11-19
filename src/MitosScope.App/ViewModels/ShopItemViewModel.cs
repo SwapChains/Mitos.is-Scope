@@ -24,13 +24,13 @@ public sealed class ShopItemViewModel(ShopItem item, long coins, long? playerLev
     public IReadOnlyList<ItemAttr> Attrs => Item.Attrs;
     public bool HasAttrs => Item.Attrs.Count > 0;
 
-    /// <summary>"+12 Speed Â· +8 Resilience" on the tile.</summary>
-    public string AttrsShortText => AttrText.Short(Item.Attrs);
+    /// <summary>"+12 Speed · +8 Resilience" on the tile.</summary>
+    public string AttrsShortText => AttrText.Tile(Item.Attrs);
 
     public bool Matches(string? query) => ItemText.Matches(query, Name, Item.Description, Item.Attrs);
 
-    /// <summary>"300 coins", with "Â· x5" for packs of consumables.</summary>
-    public string PriceText => Item.Pack > 1 ? $"{Item.Price:N0} coins Â· x{Item.Pack:N0}" : $"{Item.Price:N0} coins";
+    /// <summary>"300 coins", with "· x5" for packs of consumables.</summary>
+    public string PriceText => Item.Pack > 1 ? $"{Item.Price:N0} coins · x{Item.Pack:N0}" : $"{Item.Price:N0} coins";
 
     public bool IsOwned => Item.Owned;
 
@@ -58,7 +58,7 @@ public sealed class ShopItemViewModel(ShopItem item, long coins, long? playerLev
     /// </summary>
     public bool IsBuyable => Item.CanBuy || (IsConsumable && Item.Owned && !(playerLevel is { } lvl && Item.Level > lvl));
 
-    /// <summary>"Requires level 20", "Owned", â€¦: why the card has no Buy button, or "" when it has one.</summary>
+    /// <summary>"Requires level 20", "Owned", …: why the card has no Buy button, or "" when it has one.</summary>
     public string NotBuyableText => IsBuyable ? "" : StateText.Length > 0 ? StateText : "Can't be bought";
 
     /// <summary>"Level 12" on the card.</summary>
@@ -78,8 +78,12 @@ public static class AttrText
             parts.Add($"{attrs[i].ValueText} {attrs[i].DisplayName}");
         if (attrs.Count > max)
             parts.Add($"+{attrs.Count - max} more");
-        return string.Join(" Â· ", parts);
+        return string.Join(" · ", parts);
     }
+
+    /// <summary>Every attribute, one per line ("+12 Speed"), for the tiles.</summary>
+    public static string Tile(IReadOnlyList<ItemAttr> attrs) =>
+        string.Join("\n", System.Linq.Enumerable.Select(attrs, a => $"{a.ValueText} {a.DisplayName}"));
 
     /// <summary>One attribute per line, for tooltips.</summary>
     public static string Lines(IReadOnlyList<ItemAttr> attrs) =>

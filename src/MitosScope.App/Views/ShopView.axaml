@@ -26,6 +26,7 @@
             <Setter Property="Padding" Value="0" />
             <Setter Property="CornerRadius" Value="6" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalAlignment" Value="Stretch" />
         </Style>
         <!-- Items the player can't buy (level, achievement or coins missing) are dimmed. -->

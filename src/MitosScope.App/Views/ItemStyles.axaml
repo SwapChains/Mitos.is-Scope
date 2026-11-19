@@ -31,13 +31,14 @@
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="#D0FFFFFF" />
     </Style>
+    <!-- Every attribute of the item on the tile, one per line. -->
     <Style Selector="TextBlock.tileAttrs">
         <Setter Property="FontSize" Value="10" />
+        <Setter Property="LineHeight" Value="13" />
         <Setter Property="Foreground" Value="#FF8CE06A" />
         <Setter Property="TextAlignment" Value="Center" />
-        <Setter Property="TextWrapping" Value="Wrap" />
-        <Setter Property="MaxLines" Value="2" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="Margin" Value="0,1,0,1" />
     </Style>
     <Style Selector="TextBlock.section">
         <Setter Property="FontSize" Value="11" />
