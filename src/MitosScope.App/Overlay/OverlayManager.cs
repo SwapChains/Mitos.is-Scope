@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
@@ -172,6 +172,7 @@ public sealed class OverlayManager
         if (IsEditMode == enabled)
             return;
         IsEditMode = enabled;
+        _followed.Clear(); // the positions arranged in edit mode are the new reference
 
         foreach (var window in _windows.Values)
         {
@@ -283,6 +284,64 @@ public sealed class OverlayManager
         var w = (int)(window.Popup.Width * screen.Scaling);
         var h = (int)(window.Popup.Height * screen.Scaling);
         window.Position = new PixelPoint(area.X + (area.Width - w) / 2, area.Y + (area.Height - h) / 2);
+    }
+
+    // ---- following the game window (windowed mode) ------------------------------------------
+
+    /// <summary>
+    /// Where each panel would be if it had never been kept on screen: a panel pushed against the
+    /// screen edge goes back to its place when the game window comes back.
+    /// </summary>
+    private readonly Dictionary<PanelWindow, PixelPoint> _followed = [];
+
+    /// <summary>
+    /// The game window moved by <paramref name="offset"/> (screen pixels): every panel moves with it,
+    /// staying inside the screen. Edit mode keeps the panels still, so they can be arranged.
+    /// </summary>
+    public void FollowGameWindow(PixelPoint offset)
+    {
+        if (IsEditMode)
+            return;
+        foreach (var window in _windows.Values)
+        {
+            var layout = LayoutOf(window.Panel);
+            var target = (_followed.TryGetValue(window, out var p) ? p : window.Position) + offset;
+            _followed[window] = target;
+            var position = KeepOnScreen(window, target, layout);
+            if (position == window.Position)
+                continue;
+            window.Position = position;
+            // Hidden panels move too (CaptureLayout skips them): save the position directly.
+            layout.X = position.X;
+            layout.Y = position.Y;
+            _settings.Panels[window.Panel.Id] = layout;
+        }
+    }
+
+    /// <summary>Clamps a panel's position to the screen it's (mostly) on, or the nearest one.</summary>
+    private static PixelPoint KeepOnScreen(PanelWindow window, PixelPoint position, PanelLayout layout)
+    {
+        var screens = window.Screens;
+        var guess = new PixelRect(position, new PixelSize(Math.Max(1, (int)layout.Width), Math.Max(1, (int)layout.Height)));
+        var screen = screens.ScreenFromBounds(guess) ?? screens.All
+            .OrderBy(s => Distance(s.Bounds, guess.Center))
+            .FirstOrDefault();
+        if (screen is null)
+            return position;
+
+        var area = screen.Bounds;
+        var w = (int)(layout.Width * screen.Scaling);
+        var h = (int)(layout.Height * screen.Scaling);
+        var x = Math.Max(area.X, Math.Min(position.X, area.Right - w));
+        var y = Math.Max(area.Y, Math.Min(position.Y, area.Bottom - h));
+        return new PixelPoint(x, y);
+    }
+
+    private static double Distance(PixelRect rect, PixelPoint point)
+    {
+        var dx = Math.Max(0, Math.Max(rect.X - point.X, point.X - rect.Right));
+        var dy = Math.Max(0, Math.Max(rect.Y - point.Y, point.Y - rect.Bottom));
+        return Math.Sqrt((double)dx * dx + (double)dy * dy);
     }
 
     // ---- layout -----------------------------------------------------------------------------
