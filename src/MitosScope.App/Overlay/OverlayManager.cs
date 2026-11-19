@@ -172,7 +172,6 @@ public sealed class OverlayManager
         if (IsEditMode == enabled)
             return;
         IsEditMode = enabled;
-        _followed.Clear(); // the positions arranged in edit mode are the new reference
 
         foreach (var window in _windows.Values)
         {
@@ -181,9 +180,17 @@ public sealed class OverlayManager
         }
 
         if (!enabled)
-            SaveLayout(); // leaving edit mode = layout confirmed (before hiding windows: CaptureLayout skips hidden ones)
+        {
+            // leaving edit mode = layout confirmed: the distances from the game window are taken
+            // from where the panels are now (before hiding windows: CaptureLayout skips hidden ones)
+            foreach (var window in _windows.Values.Where(w => w.IsVisible))
+                RememberOffset(window);
+            SaveLayout();
+        }
 
         ApplyVisibility(); // edit mode shows every enabled panel, whatever the game state
+        if (!enabled)
+            PlaceInGameWindow(); // back inside the active instance
 
         EditModeChanged?.Invoke(enabled);
     }
@@ -286,62 +293,178 @@ public sealed class OverlayManager
         window.Position = new PixelPoint(area.X + (area.Width - w) / 2, area.Y + (area.Height - h) / 2);
     }
 
-    // ---- following the game window (windowed mode) ------------------------------------------
+    // ---- panels inside the active game window ------------------------------------------------
+    //
+    // Each panel remembers its distance from the nearest corner of the game window (in DIPs, so
+    // it's the same on any DPI) and is placed at that distance inside whichever instance is
+    // active: when the game starts, when another instance gets the focus, when switching back,
+    // and when the active window is dragged or resized. Arranging the panels in edit mode
+    // updates the distances. Panels never go outside the game window.
+
+    /// <summary>The game window the panels are inside now (0 = none yet).</summary>
+    private long _gameWindow;
+
+    /// <summary>The game area of <see cref="_gameWindow"/> the last time the panels were placed.</summary>
+    private PixelRect _gameArea;
+
+    /// <summary>Set while this class moves the panels, so their PositionChanged doesn't count as the player arranging them.</summary>
+    private bool _placing;
 
     /// <summary>
-    /// Where each panel would be if it had never been kept on screen: a panel pushed against the
-    /// screen edge goes back to its place when the game window comes back.
+    /// <paramref name="hwnd"/> is the active game window: put every panel inside it, at its
+    /// remembered distance from the window's corner. Called on every focus of a game window.
     /// </summary>
-    private readonly Dictionary<PanelWindow, PixelPoint> _followed = [];
+    public void AttachToGameWindow(long hwnd)
+    {
+        if (hwnd == 0)
+            return;
+        if (IsEditMode)
+        {
+            // Arranging: keep the panels where the player puts them, but measure them against this window.
+            _gameWindow = hwnd;
+            if (Services.GameWindowWatcher.TryGetClientRect(hwnd, out var area))
+                _gameArea = area;
+            return;
+        }
+        if (hwnd == _gameWindow && Services.GameWindowWatcher.TryGetClientRect(hwnd, out var same) && same == _gameArea)
+            return; // same window, same place: nothing to do
+        _gameWindow = hwnd;
+        PlaceInGameWindow();
+    }
 
     /// <summary>
-    /// The game window moved by <paramref name="offset"/> (screen pixels): every panel moves with it,
-    /// staying inside the screen. Edit mode keeps the panels still, so they can be arranged.
+    /// Tray "Reset panels": every panel enabled again, with its default size, menu/match options
+    /// and place inside the game window (PanelViewModel.DefaultLayout). Saved right away.
     /// </summary>
-    public void FollowGameWindow(PixelPoint offset)
+    public void ResetPanels()
+    {
+        _placing = true;
+        try
+        {
+            foreach (var panel in Panels)
+            {
+                var layout = panel.DefaultLayout; // a new instance each time
+                layout.Visible = true;
+                _settings.Panels[panel.Id] = layout;
+
+                var window = _windows[panel.Id];
+                window.Width = layout.Width;
+                window.Height = layout.Height;
+                window.Position = new PixelPoint(layout.X, layout.Y); // until a game window is known
+
+                PanelEnabledChanged?.Invoke(panel, true);
+                PanelGameStateChanged?.Invoke(panel, false, layout.ShowInMenu);
+                PanelGameStateChanged?.Invoke(panel, true, layout.ShowInMatch);
+            }
+        }
+        finally
+        {
+            _placing = false;
+        }
+
+        ApplyVisibility();
+        PlaceInGameWindow(); // inside the active instance (no-op if no game window is known yet)
+        SaveLayout();
+    }
+
+    /// <summary>The active game window moved or changed size: the panels move with it.</summary>
+    public void GameWindowChanged()
     {
         if (IsEditMode)
-            return;
-        foreach (var window in _windows.Values)
         {
-            var layout = LayoutOf(window.Panel);
-            var target = (_followed.TryGetValue(window, out var p) ? p : window.Position) + offset;
-            _followed[window] = target;
-            var position = KeepOnScreen(window, target, layout);
-            if (position == window.Position)
-                continue;
-            window.Position = position;
-            // Hidden panels move too (CaptureLayout skips them): save the position directly.
-            layout.X = position.X;
-            layout.Y = position.Y;
-            _settings.Panels[window.Panel.Id] = layout;
+            if (Services.GameWindowWatcher.TryGetClientRect(_gameWindow, out var area))
+                _gameArea = area;
+            return;
+        }
+        PlaceInGameWindow();
+    }
+
+    private void PlaceInGameWindow()
+    {
+        if (!Services.GameWindowWatcher.TryGetClientRect(_gameWindow, out var area))
+            return; // minimized or gone: keep the last place
+        _gameArea = area;
+        var scaling = ScalingAt(area);
+
+        _placing = true;
+        try
+        {
+            foreach (var window in _windows.Values)
+            {
+                var layout = LayoutOf(window.Panel);
+                if (!layout.HasGameOffset)
+                    RememberOffset(layout, new PixelPoint(layout.X, layout.Y), area, scaling); // first time: keep where it is, as offset
+
+                var w = (int)Math.Round(layout.Width * scaling);
+                var h = (int)Math.Round(layout.Height * scaling);
+                var dx = (int)Math.Round(layout.GameOffsetX * scaling);
+                var dy = (int)Math.Round(layout.GameOffsetY * scaling);
+                // the reference point, as a percentage of the game window (layouts saved before the
+                // percentages: the window's corner, as they were measured)
+                var fx = layout.GameFractionX ?? (layout.GameAnchorRight ? 1 : 0);
+                var fy = layout.GameFractionY ?? (layout.GameAnchorBottom ? 1 : 0);
+                var px = area.X + (int)Math.Round(fx * area.Width);
+                var py = area.Y + (int)Math.Round(fy * area.Height);
+                var x = layout.GameAnchorRight ? px - w - dx : px + dx;
+                var y = layout.GameAnchorBottom ? py - h - dy : py + dy;
+                // inside the game window, even if it's smaller than when the panels were arranged
+                x = Math.Max(area.X, Math.Min(x, area.Right - w));
+                y = Math.Max(area.Y, Math.Min(y, area.Bottom - h));
+
+                var position = new PixelPoint(x, y);
+                // Hidden panels move too: CaptureLayout skips them, so the position is saved here.
+                layout.X = x;
+                layout.Y = y;
+                _settings.Panels[window.Panel.Id] = layout;
+                if (window.Position != position)
+                    window.Position = position;
+            }
+        }
+        finally
+        {
+            _placing = false;
         }
     }
 
-    /// <summary>Clamps a panel's position to the screen it's (mostly) on, or the nearest one.</summary>
-    private static PixelPoint KeepOnScreen(PanelWindow window, PixelPoint position, PanelLayout layout)
+    /// <summary>
+    /// Stores where a panel is relative to the game area, as a percentage of it: the edge nearest to
+    /// a side of the window (a panel on the right keeps its right edge at the same % of the width),
+    /// so it stays in the same free spot of the game's UI on a bigger or smaller instance.
+    /// </summary>
+    private static void RememberOffset(PanelLayout layout, PixelPoint position, PixelRect area, double scaling)
     {
-        var screens = window.Screens;
-        var guess = new PixelRect(position, new PixelSize(Math.Max(1, (int)layout.Width), Math.Max(1, (int)layout.Height)));
-        var screen = screens.ScreenFromBounds(guess) ?? screens.All
-            .OrderBy(s => Distance(s.Bounds, guess.Center))
-            .FirstOrDefault();
-        if (screen is null)
-            return position;
+        var w = layout.Width * scaling;
+        var h = layout.Height * scaling;
+        var left = position.X - area.X;
+        var top = position.Y - area.Y;
+        var right = area.Right - (position.X + w);
+        var bottom = area.Bottom - (position.Y + h);
 
-        var area = screen.Bounds;
-        var w = (int)(layout.Width * screen.Scaling);
-        var h = (int)(layout.Height * screen.Scaling);
-        var x = Math.Max(area.X, Math.Min(position.X, area.Right - w));
-        var y = Math.Max(area.Y, Math.Min(position.Y, area.Bottom - h));
-        return new PixelPoint(x, y);
+        layout.GameAnchorRight = right < left;
+        layout.GameAnchorBottom = bottom < top;
+        var edgeX = layout.GameAnchorRight ? position.X + w - area.X : left;
+        var edgeY = layout.GameAnchorBottom ? position.Y + h - area.Y : top;
+        layout.GameFractionX = Math.Clamp(edgeX / Math.Max(1, area.Width), 0, 1);
+        layout.GameFractionY = Math.Clamp(edgeY / Math.Max(1, area.Height), 0, 1);
+        layout.GameOffsetX = 0;
+        layout.GameOffsetY = 0;
+        layout.HasGameOffset = true;
     }
 
-    private static double Distance(PixelRect rect, PixelPoint point)
+    /// <summary>After the player moved a panel in edit mode: its new distance from the game window.</summary>
+    private void RememberOffset(PanelWindow window)
     {
-        var dx = Math.Max(0, Math.Max(rect.X - point.X, point.X - rect.Right));
-        var dy = Math.Max(0, Math.Max(rect.Y - point.Y, point.Y - rect.Bottom));
-        return Math.Sqrt((double)dx * dx + (double)dy * dy);
+        if (_gameWindow == 0 || !Services.GameWindowWatcher.TryGetClientRect(_gameWindow, out var area))
+            return;
+        RememberOffset(LayoutOf(window.Panel), window.Position, area, ScalingAt(area));
+    }
+
+    /// <summary>DPI scaling of the screen the game window is on.</summary>
+    private double ScalingAt(PixelRect area)
+    {
+        var probe = _windows.Values.FirstOrDefault();
+        var screen = probe?.Screens.ScreenFromBounds(area) ?? probe?.Screens.Primary;
+        return screen?.Scaling is > 0 and var s ? s : 1;
     }
 
     // ---- layout -----------------------------------------------------------------------------
@@ -356,6 +479,9 @@ public sealed class OverlayManager
     {
         if (!window.IsVisible)
             return;
+        // Moved by the player in edit mode (not by PlaceInGameWindow): new distance from the game window.
+        if (IsEditMode && !_placing)
+            RememberOffset(window);
         var layout = LayoutOf(window.Panel);
         layout.X = window.Position.X;
         layout.Y = window.Position.Y;

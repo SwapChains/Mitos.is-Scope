@@ -5,10 +5,9 @@ using Avalonia;
 namespace MitosScope.App.Services;
 
 /// <summary>
-/// Event-driven notification of a game window being dragged around (windowed mode), via
-/// SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE) on that window's process. Only pure moves are
-/// reported: a size change (resize, maximize, fullscreen toggle) and minimizing just update the
-/// reference rectangle, so the panels don't jump. Windows only.
+/// Event-driven notification of the active game window changing place or size (dragged in windowed
+/// mode, resized, maximized, fullscreen toggled), via SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE)
+/// on that window's process. Minimizing is ignored: the panels keep their last place. Windows only.
 /// Must be used on the UI thread (the hook callback is delivered through its message loop).
 /// </summary>
 public sealed partial class GameWindowWatcher : IDisposable
@@ -26,8 +25,8 @@ public sealed partial class GameWindowWatcher : IDisposable
     private nint _window;
     private RECT _rect;
 
-    /// <summary>Raised with the offset (screen pixels) the watched window just moved by.</summary>
-    public event Action<PixelPoint>? Moved;
+    /// <summary>The watched window moved or changed size (not raised while it's minimized).</summary>
+    public event Action? Changed;
 
     /// <summary>Watches <paramref name="hwnd"/> from now on (a different window replaces the previous one).</summary>
     public void Watch(long hwnd)
@@ -50,11 +49,30 @@ public sealed partial class GameWindowWatcher : IDisposable
             return;
         if (IsIconic(hwnd) || !GetWindowRect(hwnd, out var rect))
             return; // minimized: keep the last real position
-        var old = _rect;
+        if (rect.Left == _rect.Left && rect.Top == _rect.Top && rect.Right == _rect.Right && rect.Bottom == _rect.Bottom)
+            return;
         _rect = rect;
-        var sameSize = rect.Right - rect.Left == old.Right - old.Left && rect.Bottom - rect.Top == old.Bottom - old.Top;
-        if (sameSize && (rect.Left != old.Left || rect.Top != old.Top))
-            Moved?.Invoke(new PixelPoint(rect.Left - old.Left, rect.Top - old.Top));
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// The game area of <paramref name="hwnd"/> on screen (its client area, without title bar and
+    /// borders), in screen pixels. False if it isn't a window, it's minimized or it has no area.
+    /// </summary>
+    public static bool TryGetClientRect(long hwnd, out PixelRect rect)
+    {
+        rect = default;
+        if (!OperatingSystem.IsWindows() || hwnd == 0 || IsIconic((nint)hwnd) || !GetClientRect((nint)hwnd, out var client))
+            return false;
+        var origin = new POINT { X = 0, Y = 0 };
+        if (!ClientToScreen((nint)hwnd, ref origin))
+            return false;
+        var width = client.Right - client.Left;
+        var height = client.Bottom - client.Top;
+        if (width <= 0 || height <= 0)
+            return false;
+        rect = new PixelRect(origin.X, origin.Y, width, height);
+        return true;
     }
 
     private void Unhook()
@@ -76,6 +94,13 @@ public sealed partial class GameWindowWatcher : IDisposable
         public int Bottom;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
     [LibraryImport("user32.dll")]
     private static partial nint SetWinEventHook(uint eventMin, uint eventMax, nint hmodWinEventProc,
         nint lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
@@ -90,6 +115,14 @@ public sealed partial class GameWindowWatcher : IDisposable
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetWindowRect(nint hWnd, out RECT lpRect);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetClientRect(nint hWnd, out RECT lpRect);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ClientToScreen(nint hWnd, ref POINT lpPoint);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

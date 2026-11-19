@@ -37,6 +37,33 @@ public sealed class PanelLayout
 
     /// <summary>Show the panel while the player is in a match (game.in_game).</summary>
     public bool ShowInMatch { get; set; } = true;
+
+    // ---- place inside the game window (see OverlayManager.AttachToGameWindow) ----
+    // The panel's edge nearest to a side of the game window is kept at the same percentage of the
+    // window (GameFraction, 0..1) plus a distance in DIPs (GameOffset, used by the default layout
+    // to stack panels in a column). The game's own UI scales with its window, so percentages keep
+    // the panels in the same free spot on every instance, whatever its size.
+
+    /// <summary>False until the panel has been placed against a game window once.</summary>
+    public bool HasGameOffset { get; set; }
+
+    /// <summary>The panel's right edge is the reference (else its left edge).</summary>
+    public bool GameAnchorRight { get; set; }
+
+    /// <summary>The panel's bottom edge is the reference (else its top edge).</summary>
+    public bool GameAnchorBottom { get; set; }
+
+    /// <summary>Where the reference edge is, as a fraction of the game window's width (0 = left side, 1 = right side).</summary>
+    public double? GameFractionX { get; set; }
+
+    /// <summary>Where the reference edge is, as a fraction of the game window's height (0 = top, 1 = bottom).</summary>
+    public double? GameFractionY { get; set; }
+
+    /// <summary>Extra distance in DIPs from that point, towards the inside of the panel's column.</summary>
+    public double GameOffsetX { get; set; }
+
+    /// <summary>Extra distance in DIPs from that point, downwards (upwards when anchored to the bottom).</summary>
+    public double GameOffsetY { get; set; }
 }
 
 /// <summary>Reads/writes %APPDATA%\MitosScope\settings.json.</summary>

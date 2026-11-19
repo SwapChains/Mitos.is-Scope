@@ -11,7 +11,7 @@
         ShowInTaskbar="False"
         ShowActivated="False"
         CanResize="{Binding IsEditMode}"
-        MinWidth="120" MinHeight="48">
+        MinWidth="100" MinHeight="48">
 
     <!-- In edit mode the panel gets a blue border: drag the edges/corners to resize, anywhere
          else to move, ✕ to hide the panel (re-enable it from the tray menu).

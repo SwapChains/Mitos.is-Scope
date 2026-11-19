@@ -12,8 +12,8 @@ namespace MitosScope.App.Overlay;
 /// - anything else gets focus → the overlay hides until a game client is focused again.
 /// Edit mode always keeps the overlay visible (otherwise using the tray menu would hide it).
 /// Our own windows never count (ForegroundWatcher skips them).
-/// The last focused game window is also watched: when it's dragged (windowed mode) the panels
-/// follow it (see OverlayManager.FollowGameWindow).
+/// The focused game window is where the panels go: they're placed inside it each time it gets the
+/// focus, and they follow it when it's dragged or resized (see OverlayManager.AttachToGameWindow).
 /// </summary>
 public sealed class FocusController : IDisposable
 {
@@ -42,7 +42,7 @@ public sealed class FocusController : IDisposable
         _overlay.EditModeChanged += _ => UpdateVisibility();
         // The window of a client is known only after it logs in: it may already be in the foreground.
         _tracker.SessionWindowKnown += _ => Evaluate();
-        _gameWindow.Moved += _overlay.FollowGameWindow;
+        _gameWindow.Changed += _overlay.GameWindowChanged;
         _watcher.Start();
     }
 
@@ -69,7 +69,12 @@ public sealed class FocusController : IDisposable
                 _tracker.FocusProcess(_foregroundProcess);
         }
         if (_gameFocused)
+        {
+            // The active instance: the panels go inside its window (game start, switching instance,
+            // coming back to it), and follow it from now on.
             _gameWindow.Watch(_foregroundWindow);
+            _overlay.AttachToGameWindow(_foregroundWindow);
+        }
         UpdateVisibility();
     }
 

@@ -184,6 +184,12 @@ public partial class App : Application
         overlay.PanelEnabledChanged += (panel, on) => enabledItems[panel].IsChecked = on;
         overlay.PanelGameStateChanged += (panel, inMatch, on) => stateItems[(panel, inMatch)].IsChecked = on;
 
+        // Every panel back on, with its default size and options, at its default place inside the game window.
+        var resetPanels = new NativeMenuItem("Reset panels");
+        resetPanels.Click += (_, _) => overlay.ResetPanels();
+        panelsMenu.Add(new NativeMenuItemSeparator());
+        panelsMenu.Add(resetPanels);
+
         // "Open Instance": slots 1-20 → starts the game with "-slot0".."-slot19".
         var instanceMenu = new NativeMenu();
         void FillInstanceMenu()
