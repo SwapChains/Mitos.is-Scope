@@ -211,7 +211,7 @@ public partial class ShopViewModel : PopupViewModel
     [ObservableProperty] public partial bool BuildUseOwned { get; set; }
 
     public string BuildHint => BuildAttrs is null ? ""
-        : !BuildAttrs.Any(a => a.IsSelected) ? "Pick the attributes in order of priority: the 1° is maximized first, the 2° decides between builds equal in the 1°, and so on. The tool finds the best 3 items (one per category)."
+        : !BuildAttrs.Any(a => a.IsSelected) ? "Pick the attributes you want, in order of priority: the tool finds the best 3 items (one per category) for all of them together, then lists the builds by the 1°, then the 2°, and so on."
         : HasBuildResults ? ""
         : "No equipment gives these attributes with the options chosen.";
 

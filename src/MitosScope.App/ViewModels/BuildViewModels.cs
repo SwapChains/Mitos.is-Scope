@@ -28,9 +28,9 @@ public sealed partial class BuildAttrViewModel(string name, string label) : Obse
 
     public string Tip => Priority switch
     {
-        0 => "Click to maximize it (the order you click sets the priority)",
-        1 => "Maximized first. Click to remove it",
-        _ => $"Priority {Priority}: decides only between builds equal in the attributes before it. Click to remove it",
+        0 => "Click to add it (the order you click sets the priority)",
+        1 => "1st priority: the builds are listed by this one first. Click to remove it",
+        _ => $"Priority {Priority}: orders the builds after the attributes before it. Click to remove it",
     };
 }
 

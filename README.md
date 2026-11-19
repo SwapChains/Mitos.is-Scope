@@ -17,7 +17,7 @@ Created by **Chains** ([SwapChains](https://github.com/SwapChains)).
 - **Click-through**: once the layout is locked, your clicks go straight to the game.
 - **Quick launch**: start a new game instance on any slot (1-20) from the tray, and optionally start MitosScope with Windows.
 - **Item attributes**: shop and inventory show what every item gives (speed, resilience…) and its description, and you can search items by name, attribute or description.
-- **Build tool**: pick the attributes you want and the shop finds the best 3 items to equip (one per category, like the game's slots), counting what you already own as free. It can stay within your level and your coins.
+- **Build tool**: pick the attributes you want, in order of priority (1°, 2°, 3°…). The shop finds the best 3 items to equip for all of them together (one per category, like the game's slots), counting what you already own as free, and lists the builds by your priority. It can stay within your level and your coins.
 - **Item sets**: in the inventory, save named sets of up to 3 items and swap to one in a click. Each set shows what it gives in total. Sets are kept on your PC for each account.
 
 ## Panels
