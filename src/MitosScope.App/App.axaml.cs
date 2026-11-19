@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
@@ -28,6 +28,7 @@ public partial class App : Application
     private HotkeyService? _hotkeys;
     private FocusController? _focus;
     private MatchStateController? _matchState;
+    private GameLauncher _launcher = null!;
 
     public override void Initialize()
     {
@@ -46,6 +47,12 @@ public partial class App : Application
             var firstRun = _settings.Panels.Count == 0;
 
             var tracker = new TrackerViewModel();
+            _launcher = new GameLauncher(_settings);
+            tracker.SessionWindowKnown += vm =>
+            {
+                if (vm.Session.WindowHandle is { } hwnd)
+                    _launcher.RememberFromWindow(hwnd);
+            };
             StartSessions(tracker);
 
             var popups = CreatePopups(tracker, _settings);
@@ -177,6 +184,35 @@ public partial class App : Application
         overlay.PanelEnabledChanged += (panel, on) => enabledItems[panel].IsChecked = on;
         overlay.PanelGameStateChanged += (panel, inMatch, on) => stateItems[(panel, inMatch)].IsChecked = on;
 
+        // "Open Instance": slots 1-20 → starts the game with "-slot0".."-slot19".
+        var instanceMenu = new NativeMenu();
+        void FillInstanceMenu()
+        {
+            instanceMenu.Items.Clear();
+            if (_launcher.GamePath is null)
+            {
+                instanceMenu.Add(new NativeMenuItem("Open the game once so its location is known") { IsEnabled = false });
+                return;
+            }
+            for (var slot = 0; slot < GameLauncher.SlotCount; slot++)
+            {
+                var item = new NativeMenuItem((slot + 1).ToString());
+                var s = slot;
+                item.Click += (_, _) => _launcher.Launch(s);
+                instanceMenu.Add(item);
+            }
+        }
+        FillInstanceMenu();
+        _launcher.GamePathChanged += FillInstanceMenu;
+
+        var startWithWindows = CheckItem("Start with Windows", StartupRegistration.IsEnabled, () => { });
+        startWithWindows.IsEnabled = StartupRegistration.IsSupported;
+        startWithWindows.Click += (_, _) =>
+        {
+            StartupRegistration.SetEnabled(!StartupRegistration.IsEnabled);
+            startWithWindows.IsChecked = StartupRegistration.IsEnabled;
+        };
+
         var openSettings = new NativeMenuItem("Open settings folder");
         openSettings.Click += (_, _) =>
             Process.Start(new ProcessStartInfo(SettingsStore.DirectoryPath) { UseShellExecute = true });
@@ -186,14 +222,16 @@ public partial class App : Application
 
         var tray = new TrayIcon
         {
-            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://MitosScope.App/Assets/avalonia-logo.ico"))),
+            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://MitosScope.App/Assets/MitosScope.ico"))),
             ToolTipText = "MitosScope",
             Menu =
             [
                 editMode,
                 showOverlay,
                 new NativeMenuItem("Panels") { Menu = panelsMenu },
+                new NativeMenuItem("Open Instance") { Menu = instanceMenu },
                 new NativeMenuItemSeparator(),
+                startWithWindows,
                 openSettings,
                 exit,
             ],

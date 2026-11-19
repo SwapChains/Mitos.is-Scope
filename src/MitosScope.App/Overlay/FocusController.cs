@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using MitosScope.App.Services;
 using MitosScope.App.ViewModels;
 using MitosScope.Core.Sessions;
@@ -12,10 +12,13 @@ namespace MitosScope.App.Overlay;
 /// - anything else gets focus → the overlay hides until a game client is focused again.
 /// Edit mode always keeps the overlay visible (otherwise using the tray menu would hide it).
 /// Our own windows never count (ForegroundWatcher skips them).
+/// The last focused game window is also watched: when it's dragged (windowed mode) the panels
+/// follow it (see OverlayManager.FollowGameWindow).
 /// </summary>
 public sealed class FocusController : IDisposable
 {
     private readonly ForegroundWatcher _watcher = new();
+    private readonly GameWindowWatcher _gameWindow = new();
     private readonly SessionManager? _sessions;
     private readonly TrackerViewModel _tracker;
     private readonly OverlayManager _overlay;
@@ -39,6 +42,7 @@ public sealed class FocusController : IDisposable
         _overlay.EditModeChanged += _ => UpdateVisibility();
         // The window of a client is known only after it logs in: it may already be in the foreground.
         _tracker.SessionWindowKnown += _ => Evaluate();
+        _gameWindow.Moved += _overlay.FollowGameWindow;
         _watcher.Start();
     }
 
@@ -64,10 +68,16 @@ public sealed class FocusController : IDisposable
             if (_gameFocused)
                 _tracker.FocusProcess(_foregroundProcess);
         }
+        if (_gameFocused)
+            _gameWindow.Watch(_foregroundWindow);
         UpdateVisibility();
     }
 
     private void UpdateVisibility() => _overlay.SetFocusVisible(_overlay.IsEditMode || _gameFocused);
 
-    public void Dispose() => _watcher.Dispose();
+    public void Dispose()
+    {
+        _watcher.Dispose();
+        _gameWindow.Dispose();
+    }
 }
